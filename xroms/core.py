@@ -5,7 +5,6 @@ import numpy as np
 from scipy.interpolate import griddata
 import dask
 import warnings
-import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import glob
 

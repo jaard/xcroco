@@ -30,7 +30,7 @@ CLASSIFIERS = [
     "Topic :: Scientific/Engineering",
 ]
 
-INSTALL_REQUIRES = ["xarray", "dask", "cartopy", "numpy"]
+INSTALL_REQUIRES = ["xarray", "pandas", "dask", "cartopy", "numpy", "scipy", "xgcm"]
 SETUP_REQUIRES = ["pytest-runner"]
 TESTS_REQUIRE = ["pytest >= 2.8", "coverage"]
 
