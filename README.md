@@ -5,7 +5,7 @@ Heavily inspired by the ROMSTOOLS Matlab toolbox, with function names being larg
 Documentation is currently missing, please rely on the docstrings of individual methods for hints on usage.
 
 ## Installation
-Clone this repository with `$ git clone git@github.com:jbusecke/xmovie.git` and
+Clone this repository with `$ git clone git@github.com:jaard/xroms.git` and
 install it from source using `$ python setup.py install` or `$ pip install .`
 
 If you use the Anaconda package manager, make sure you install to the correct environment with `$ which python` or `$ which pip` which should point to your miniconda directory.
