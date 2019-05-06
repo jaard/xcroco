@@ -1,5 +1,4 @@
 import sys
-
 from setuptools import setup, find_packages
 
 MAJOR = 0
@@ -37,9 +36,10 @@ TESTS_REQUIRE = ["pytest >= 2.8", "coverage"]
 if sys.version_info[:2] < (2, 7):
     TESTS_REQUIRE += ["unittest2 == 0.5.1"]
 
+
 DESCRIPTION = "Tools to visualize output from the ROMS/CROCO ocean model"
-LONG_DESCRIPTION = """To be written.
-"""
+with open("README.md", "r") as fh:
+    LONG_DESCRIPTION = fh.read()
 
 setup(
     name=DISTNAME,
