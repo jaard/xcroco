@@ -1,9 +1,0 @@
-README.md
-setup.py
-xcroco/__init__.py
-xcroco/core.py
-xroms.egg-info/PKG-INFO
-xroms.egg-info/SOURCES.txt
-xroms.egg-info/dependency_links.txt
-xroms.egg-info/requires.txt
-xroms.egg-info/top_level.txt

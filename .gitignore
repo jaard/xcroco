@@ -1,1 +1,3 @@
 .DS_Store
+xcroco.egg-info/*
+.eggs/*
