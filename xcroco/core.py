@@ -24,7 +24,7 @@ def update_progress(progress):
     sys.stdout.write("\r" + str(text))
     sys.stdout.flush()
 
-class Xroms:
+class Xcroco:
 
     '''
     Wrapper class to store all data and methods needed for

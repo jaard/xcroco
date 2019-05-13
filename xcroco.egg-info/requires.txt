@@ -1,0 +1,7 @@
+xarray
+pandas
+dask
+cartopy
+numpy
+scipy
+xgcm

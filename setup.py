@@ -13,19 +13,14 @@ DISTNAME = "xcroco"
 LICENSE = "MIT"
 AUTHOR = "Jaard Hauschildt"
 AUTHOR_EMAIL = "jhauschildt@geomar.de"
-URL = "https://github.com/jaard/xroms"
+URL = "https://github.com/jaard/xcroco"
 CLASSIFIERS = [
     "Development Status :: 4 - Beta",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 2",
-    "Programming Language :: Python :: 2.6",
-    "Programming Language :: Python :: 2.7",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.3",
-    "Programming Language :: Python :: 3.4",
+    "Programming Language :: Python :: 3.6",
     "Topic :: Scientific/Engineering",
 ]
 
