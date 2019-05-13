@@ -1,7 +1,7 @@
 README.md
 setup.py
-xroms/__init__.py
-xroms/core.py
+xcroco/__init__.py
+xcroco/core.py
 xroms.egg-info/PKG-INFO
 xroms.egg-info/SOURCES.txt
 xroms.egg-info/dependency_links.txt

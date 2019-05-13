@@ -9,7 +9,7 @@ VERSION = "%d.%d.%d" % (MAJOR, MINOR, MICRO)
 QUALIFIER = ""
 
 
-DISTNAME = "xroms"
+DISTNAME = "xcroco"
 LICENSE = "MIT"
 AUTHOR = "Jaard Hauschildt"
 AUTHOR_EMAIL = "jhauschildt@geomar.de"
