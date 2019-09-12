@@ -89,6 +89,13 @@ def croco_dataset(model_path, time_dim='time', grid=None, *args, **kwargs):
     if da2.attrs.s_coord == 2:
         da2.attrs.hc = self.Tcline
     da2.coords['z_rho'] = zlevs(da2, da2.temp)
+    zr = da2['z_rho']
+    zr.name = 'z_rho'
+    zr.attrs['long_name'] = 'depth at RHO-points'
+    zr.attrs['units'] = 'meter'
+    zr.attrs['field'] = 'depth, scalar, series'
+    zr.attrs['positive'] = 'up'
+    zr.attrs['standard_name'] = 'depth'
 
     return da2
 
@@ -281,9 +288,6 @@ def zlevs(croco_ds, var, **kwargs):
         z = z.transpose(*input_dims)
 
     return z
-
-
-###  in progress and untested below
 
 def add_coords(croco_ds, var, coords):
     for co in coords:
@@ -622,5 +626,15 @@ def vslice(croco_ds, var, **kwargs):
 
     # Interpolate to the section making an intermediate Dataset
     B0 = var.interp(**interpdict)
+    
+    # Remove distance dimension for single station
+    if B0['distance'].size == 1:
+        B0 = B0.isel(**{'distance':0})
+        del B0['distance']
+    
+    # Transpose dimensions for z_rho
+    dimlist = list(B0.dims); dimlist.remove('s_rho')
+    dimlist = ['s_rho'] + dimlist
+    B0['z_rho'] = B0['z_rho'].transpose(*dimlist)
     
     return B0
