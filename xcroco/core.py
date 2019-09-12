@@ -27,19 +27,39 @@ def update_progress(progress):
     if progress == 1:
         print('\n')
     
-def croco_dataset(model_path: list, grid: str = None, *args, **kwargs) -> xr.Dataset:
+def croco_dataset(model_path, time_dim='time', grid=None, *args, **kwargs):
+
     da = xr.open_mfdataset(model_path)
-    grid_path = grid
-    gr = xr.open_dataset(grid_path)
-    gr = gr.rename({'eta_u':'eta_rho', 'xi_v':'xi_rho'})
-    droplist = [v for v in list(gr.data_vars) if v in list(da.data_vars) + list(da.coords)]
-    for v in droplist:
-        da = da.drop(v)
-    if 'spherical' in gr.data_vars:
-        da['spherical'] = gr['spherical']
-        gr = gr.drop('spherical')
-    gr = gr.astype('float32')
-    da2 = xr.merge((da, gr))
+    
+    # Check if a separate grid file was supplied,
+    # if this is the case load & merge with output file
+    if grid:
+        grid_path = grid
+        gr = xr.open_dataset(grid_path)
+        # If the grid files has the redundant dimensions eta_u/xi_v then rename them
+        try:
+            gr = gr.rename({'eta_u':'eta_rho', 'xi_v':'xi_rho'})
+        except ValueError:
+            pass
+        droplist = [v for v in list(gr.data_vars) if v in list(da.data_vars) + list(da.coords)]
+        for v in droplist:
+            da = da.drop(v)
+        if 'spherical' in gr.data_vars:
+            da['spherical'] = gr['spherical']
+            gr = gr.drop('spherical')
+        gr = gr.astype('float32')
+        da2 = xr.merge((da, gr))
+
+    # If no grid file supplied, make sure redundant time dimension is removed from concatenated variables
+    else:
+        notime_vars = ['spherical','xl','el','Vtransform','sc_r','sc_w','Cs_r','Cs_w','hc','h','f','pm','pn','angle','mask_rho']
+        for vv in notime_vars:
+            try:
+                if time_dim in da[vv].dims:
+                    da[vv] = da[vv].isel(**{time_dim:0})
+            except KeyError:
+                pass
+        da2 = da
 
     # move lat/lon to coordinates
     latlon_vars = [v for v in list(da2.data_vars) if 'lat' in v or 'lon' in v]
