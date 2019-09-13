@@ -380,10 +380,10 @@ def get_depths(croco_ds, var):
     return depths
 
     
-def vinterp(croco_ds, var, z, depth):
+def vinterp(var, z, depth):
 
     '''
-    function  vnew = vinterp(var,depth)
+    function  vnew = vinterp(var,z,depth)
 
     This function interpolates a 3D variable on a horizontal level of constant
     depth
@@ -403,17 +403,38 @@ def vinterp(croco_ds, var, z, depth):
     if var.shape != z.shape:
         #display(var)
         #display(z)
-        raise ValueError('Shape mismatch between Variable and Depth arrays')
+        z = z.transpose(*var.dims)
+        if var.shape != z.shape:
+            raise ValueError('Shape mismatch between Variable and Depth arrays')
 
     vertical_dim = get_vertical_dimension(var)
     N = len(var[vertical_dim])
 
     if isinstance(depth,list):
-        raise NotImplementedError('Interpolation on full 3D grid not implemented yet')
-        # Find the grid position of the nearest vertical levels
-        for dep in depth:
-            levs = (z < depth).sum(vertical_dim)
+        # Loop over depth list
+        zslice_list = []
+        for dd in depth:
+            # Find the grid position of the nearest vertical levels
+            levs = (z < dd).sum(vertical_dim)
             levs = levs.where(levs<N, other=N-1)
+            levs.load()
+            # Do the interpolation
+            z1 = z.isel(**{str(vertical_dim):levs})
+            z2 = z.isel(**{str(vertical_dim):levs-1})
+            v1 = var.isel(**{str(vertical_dim):levs})
+            v2 = var.isel(**{str(vertical_dim):levs-1})
+            vnew = ((v1-v2)*dd + v2*z1 - v1*z2) / (z1-z2)
+            vnew = vnew.where(levs>0)
+            
+            vnew.coords['z'] = dd
+            vnew = vnew.expand_dims('z')
+
+            zslice_list.append(vnew)
+        
+        vnew = xr.concat(zslice_list, dim='z')
+        
+        #raise NotImplementedError('Interpolation on full 3D grid not implemented yet')
+
     else:
         # Find the grid position of the nearest vertical levels
         levs = (z < depth).sum(vertical_dim)
@@ -431,6 +452,14 @@ def vinterp(croco_ds, var, z, depth):
         vnew = ((v1-v2)*depth + v2*z1 - v1*z2) / (z1-z2)
         vnew = vnew.where(levs>0)
         #vnew = mask(vnew)
+        vnew.coords['z'] = depth
+    
+    vnew.coords['z'].attrs['long_name'] = 'depth of Z-levels'
+    vnew.coords['z'].name = 'z'
+    vnew.coords['z'].attrs['units'] = 'meter'
+    vnew.coords['z'].attrs['field'] = 'depth, scalar, series'
+    vnew.coords['z'].attrs['standard_name'] = 'depth'
+    vnew.attrs = var.attrs
 
     return vnew
 
@@ -512,7 +541,7 @@ def hslice(croco_ds, var, level):
             slicelist = []
             update_progress(0)
             for tt in range(timesteps):
-                timesl = vinterp(croco_ds, var.isel(time=tt), z.isel(time=tt), level)
+                timesl = vinterp(var.isel(time=tt), z.isel(time=tt), level)
                 try:
                     timesl.compute()
                 except AttributeError:
@@ -521,7 +550,7 @@ def hslice(croco_ds, var, level):
                 update_progress((tt+1)/timesteps)
             vnew = xr.concat(slicelist, dim='time')
         else:
-            vnew = vinterp(croco_ds, var, z, level)
+            vnew = vinterp(var, z, level)
         vnew.coords['depth'] = np.array(level).astype('float32')
         
     vnew = mask(croco_ds, vnew)
@@ -626,6 +655,12 @@ def vslice(croco_ds, var, **kwargs):
 
     # Interpolate to the section making an intermediate Dataset
     B0 = var.interp(**interpdict)
+    
+    B0['distance'].attrs['long_name'] = 'distance along section'
+    B0['distance'].name = 'distance'
+    B0['distance'].attrs['units'] = 'kilometer'
+    B0['distance'].attrs['field'] = 'distance, scalar, series'
+    B0['distance'].attrs['standard_name'] = 'distance'
     
     # Remove distance dimension for single station
     if B0['distance'].size == 1:
