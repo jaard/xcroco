@@ -379,6 +379,47 @@ def get_depths(croco_ds, var):
 
     return depths
 
+
+def valid_levels(levels):
+    
+    '''
+    Make the specified levels compatible with vinterp() if possible
+    '''
+    
+    if not bool(list(depth)):
+        raise ValueError('Please specify at least one valid interpolation depth')
+        
+    if hasattr(levels, '__iter__'):
+        if type(levels) != str:
+            levels = np.array(levels)
+            
+            # Check if all positive or negative depth definition
+            if (levels <= 0).all():
+                pass
+            elif (levels * -1 <= 0).all():
+                levels *= -1
+            else:
+                raise ValueError('Please use either negative or positive depth values')
+                
+            # Check if continuously decreasing, otherwise sort
+            if all(np.diff(levels) < 0):
+                pass
+            else:
+                levels = np.unique(levels)
+                levels.sort()
+                levels = levels[::-1]
+            return list(levels)
+
+        else:
+            try:
+                levels = float(levels)
+                intlevs = int(levels)
+                if intlevs == levels:
+                    levels = intlevs
+            except ValueError:
+                raise ValueError('String could not be converted to depth level')
+    return levels
+    
     
 def vinterp(var, z, depth):
 
@@ -399,6 +440,8 @@ def vinterp(var, z, depth):
     vnew    xr.DataArray
             Horizontal slice (2D matrix).
     '''
+
+    depth = valid_levels(depth)
 
     if var.shape != z.shape:
         #display(var)
