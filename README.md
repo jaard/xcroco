@@ -13,6 +13,7 @@ If you do this, make sure you use the correct environment by checking that `whic
 To avoid problems with installing dependencies, make sure to install the following packages before installing xcroco:
 
 `conda install xarray pandas numpy scipy`
+
 `conda install -c conda-forge xgcm`
 
 
