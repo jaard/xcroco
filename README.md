@@ -12,10 +12,10 @@ I strongly recommended to use Anaconda / Miniconda environments to manage your P
 If you do this, make sure you use the correct environment by checking that `which python` or `which pip` point to your miniconda directory. If that is not already the case, first activate the desired environment with `source ~/miniconda3/bin/activate your-conda-environment`.
 To avoid problems with installing dependencies, make sure to install the following packages before installing xcroco:
 
-`conda install xarray pandas numpy scipy`
-
-`conda install -c conda-forge xgcm`
-
+```
+conda install xarray pandas numpy scipy
+conda install -c conda-forge xgcm
+```
 
 >If you dont have [ssh keys](https://help.github.com/en/articles/adding-a-new-ssh-key-to-your-github-account) set up, you can use `$ git clone https://github.com/jaard/xcroco.git` and enter your github password.
 
