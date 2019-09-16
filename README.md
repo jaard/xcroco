@@ -8,6 +8,8 @@ Basic documentation is in preparation, please be patient and rely on the docstri
 Clone this repository with `git clone git@github.com:jaard/xcroco.git` and
 install it from source using `python setup.py install` or `pip install .`
 
+>If you dont have [ssh keys](https://help.github.com/en/articles/adding-a-new-ssh-key-to-your-github-account) set up, you can use `$ git clone https://github.com/jaard/xcroco.git` and enter your github password.
+
 I strongly recommended to use Anaconda / Miniconda environments to manage your Python packages.
 If you do this, make sure you use the correct environment by checking that `which python` or `which pip` point to your miniconda directory. If that is not already the case, first activate the desired environment with `source ~/miniconda3/bin/activate your-conda-environment`.
 To avoid problems with installing dependencies, make sure to install the following packages before installing xcroco:
@@ -16,6 +18,4 @@ To avoid problems with installing dependencies, make sure to install the followi
 conda install xarray numpy scipy
 conda install -c conda-forge xgcm
 ```
-
->If you dont have [ssh keys](https://help.github.com/en/articles/adding-a-new-ssh-key-to-your-github-account) set up, you can use `$ git clone https://github.com/jaard/xcroco.git` and enter your github password.
 
