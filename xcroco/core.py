@@ -27,9 +27,12 @@ def update_progress(progress):
     if progress == 1:
         print('\n')
     
-def croco_dataset(model_path, time_dim='time', grid=None, *args, **kwargs):
+def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
 
-    da = xr.open_mfdataset(model_path)
+    if isinstance(model_output, xr.Dataset):
+        da = model_output
+    else:
+        da = xr.open_mfdataset(model_output)
     
     # Check if a separate grid file was supplied,
     # if this is the case load & merge with output file
