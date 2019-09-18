@@ -19,8 +19,7 @@ git clone git@github.com:jaard/xcroco.git
 ```
 
 If you dont have [ssh keys](https://help.github.com/en/articles/adding-a-new-ssh-key-to-your-github-account) set up, you can use `$ git clone https://github.com/jaard/xcroco.git` and enter your github password.
-Check that `which python` or `which pip` point to your Conda environment directory. If that is not already the case, first activate the desired environment with `source ~/miniconda3/bin/activate your-conda-environment`.
-Now you can install xcroco from source using
+After cloning the repository, check that `which python` or `which pip` point to your Conda environment directory. If that is not already the case, first activate the desired environment with `source ~/miniconda3/bin/activate your-conda-environment`. Now you can install xcroco from source using
 
 ```
 pip install -e .
