@@ -72,6 +72,20 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
     da2.attrs = da.attrs
     da2.attrs['xgcm-Grid'] = Grid(da2, periodic=False)
 
+    
+    # Read grid parameters depending on version
+    # TODO: See how this version checking (taken from ROMSTOOLS) is done in the new official CROCOTOOLS 
+    if np.size(da2.Tcline) is 0:
+        # 'UCLA version'
+        pass
+    else:
+        # 'AGRIF version'
+        hmin = np.nanmin(da2.h)
+        try:
+            da2.hc.data = np.min([hmin, da2.Tcline])
+        except AttributeError:
+            da2['hc'] = np.min([hmin, da2.Tcline])
+
     # Check which s-coordinates are used
     # 1... old, 2...new
     try:
@@ -89,8 +103,11 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
         except KeyError:
             da2.attrs.s_coord = 1
     if da2.attrs.s_coord == 2:
-        da2.attrs.hc = da2.Tcline
+        da2['hc'] = da2.Tcline
+    
+    # Define Z coordinates
     da2.coords['z_rho'] = zlevs(da2, da2.temp)
+    
     zr = da2['z_rho']
     zr.name = 'z_rho'
     zr.attrs['long_name'] = 'depth at RHO-points'
