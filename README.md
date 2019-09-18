@@ -8,7 +8,7 @@ Basic documentation is in preparation, please be patient and rely on the docstri
 I strongly recommend to use Miniconda or Anaconda environments to manage your Python packages. However, xcroco is not available through these channels yet. To avoid problems with installing xcroco dependencies manually, make sure to install the following packages in your Conda environment before installing xcroco:
 
 ```
-conda install xarray numpy scipy
+conda install xarray numpy scipy cartopy
 conda install -c conda-forge xgcm
 ```
 
