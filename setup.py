@@ -20,11 +20,11 @@ CLASSIFIERS = [
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python",
-    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
     "Topic :: Scientific/Engineering",
 ]
 
-INSTALL_REQUIRES = ["xarray", "pandas", "dask", "cartopy", "numpy", "scipy", "xgcm"]
+INSTALL_REQUIRES = ["xarray", "numpy", "scipy", "xgcm"]
 SETUP_REQUIRES = ["pytest-runner"]
 TESTS_REQUIRE = ["pytest >= 2.8", "coverage"]
 
