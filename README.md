@@ -5,7 +5,7 @@ Heavily inspired by the original ROMSTOOLS Matlab code (Penven et al., 2007, htt
 Basic documentation is in preparation, please be patient and rely on the docstrings of individual methods in the meantime.
 
 ## How to install
-I strongly recommended to use Miniconda or Anaconda environments to manage your Python packages. However, xcroco is not available through these channels yet. To avoid problems with installing xcroco dependencies manually, make sure to install the following packages in your Conda environment before installing xcroco:
+I strongly recommend to use Miniconda or Anaconda environments to manage your Python packages. However, xcroco is not available through these channels yet. To avoid problems with installing xcroco dependencies manually, make sure to install the following packages in your Conda environment before installing xcroco:
 
 ```
 conda install xarray numpy scipy
@@ -19,7 +19,7 @@ git clone https://github.com:jaard/xcroco.git
 ```
 
 If you dont have [ssh keys](https://help.github.com/en/articles/adding-a-new-ssh-key-to-your-github-account) set up, you may be asked to enter your GitHub password.
-After cloning the repository, check that `which pip` points to your Conda environment. If that is not already the case, first activate the desired environment with `source ~/miniconda3/bin/activate your-conda-environment`. Now you can install xcroco from source using
+After cloning the repository, check that `which pip` points to your Conda environment. If this is not already the case, activate the desired environment with `source ~/miniconda3/bin/activate your-conda-environment`. Now you can install xcroco from source using
 
 ```
 pip install -e .
