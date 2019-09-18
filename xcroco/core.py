@@ -403,7 +403,7 @@ def valid_levels(levels):
     Make the specified levels compatible with vinterp() if possible
     '''
     
-    if not bool(list(depth)):
+    if not bool(list(levels)):
         raise ValueError('Please specify at least one valid interpolation depth')
         
     if hasattr(levels, '__iter__'):
