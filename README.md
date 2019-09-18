@@ -15,7 +15,7 @@ conda install -c conda-forge xgcm
 Next, clone this repository with 
 
 ```
-git clone https://github.com:jaard/xcroco.git
+git clone https://github.com/jaard/xcroco.git
 ```
 
 If you dont have [ssh keys](https://help.github.com/en/articles/adding-a-new-ssh-key-to-your-github-account) set up, you may be asked to enter your GitHub password.
