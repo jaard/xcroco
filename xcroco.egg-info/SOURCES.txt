@@ -1,9 +1,0 @@
-README.md
-setup.py
-xcroco/__init__.py
-xcroco/core.py
-xcroco.egg-info/PKG-INFO
-xcroco.egg-info/SOURCES.txt
-xcroco.egg-info/dependency_links.txt
-xcroco.egg-info/requires.txt
-xcroco.egg-info/top_level.txt
