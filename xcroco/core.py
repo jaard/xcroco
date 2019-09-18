@@ -85,12 +85,11 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
                 if vtrans.size == 1:
                     da2.attrs.s_coord = int(vtrans)
                 else:
-                    # self.s_coord = int(vtrans.isel(time=0))   <-- fails without time dimension
                     da2.attrs.s_coord = int(vtrans[0])
         except KeyError:
             da2.attrs.s_coord = 1
     if da2.attrs.s_coord == 2:
-        da2.attrs.hc = self.Tcline
+        da2.attrs.hc = da2.Tcline
     da2.coords['z_rho'] = zlevs(da2, da2.temp)
     zr = da2['z_rho']
     zr.name = 'z_rho'
@@ -132,10 +131,10 @@ def zlevs(croco_ds, var, **kwargs):
 
     Parameters
     ----------
+    croco_ds: xr.Dataset
+              Provides the variables h and zeta
     var : xr.DataArray
           on arbitrary grid (rho, u, v or w)
-    zeta (optional): if not provided, self.dataset.zeta is used
-                     must have the same shape as input var
 
     Returns
     -------
@@ -158,8 +157,6 @@ def zlevs(croco_ds, var, **kwargs):
     except ValueError:
         hc = croco_ds.hc.data
     N = croco_ds.s_rho.size
-    #self.N = self.dataset.s_rho.size
-    #self.T = self.dataset.time.size
 
     # find zeta time slices that correspond to input array
     # check time dim so it works with time averages

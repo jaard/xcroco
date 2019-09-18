@@ -1,6 +1,6 @@
 # xcroco
 Set of python tools to analyse output from the CROCO/ROMS ocean model using [xarray](https://github.com/pydata/xarray).
-Heavily inspired by the original ROMSTOOLS Matlab code (Penven et al., 2007, https://doi.org/10.1016/j.envsoft.2007.07.004), with function names being largely compatible. Some inspiration regarding horizontal interpolation was taken from the [xroms](https://github.com/bjornaa/xroms) package.
+Heavily inspired by the original ROMSTOOLS Matlab code (Penven et al., 2007, https://doi.org/10.1016/j.envsoft.2007.07.004), with function names being largely compatible. Some inspiration was also taken from the [xroms](https://github.com/bjornaa/xroms) package.
 
 Basic documentation is in preparation, please be patient and rely on the docstrings of individual methods in the meantime.
 
