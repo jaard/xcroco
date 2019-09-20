@@ -636,13 +636,25 @@ def vslice(croco_ds, var, **kwargs):
         dim1_rho = dim1.split('_')[0] + '_rho'
         dim2_rho = dim2.split('_')[0] + '_rho'
         X, Y = kwargs[dim1], kwargs[dim2]
+        Npoints = len(X)
+
+        # Make temporary DataArrays for initial interpolations
+        X0 = xr.DataArray(X, dims=["distance"])
+        Y0 = xr.DataArray(Y, dims=["distance"])
+        interpdim1 = {dim1:X0}
+        interpdim2 = {dim2:Y0}
+        interpdict = {dim1:X0, dim2:Y0}
+        rho_interpdict = {dim1_rho:X0, dim2_rho:Y0}
 
         if np.sum(['xi' in k or 'eta' in k for k in kwargs]) == 2:
-            pass
+            #XI_ETA = True
+            Xgrid_dist = np.diff(X)
+            Ygrid_dist = np.diff(Y)
         
         elif np.sum(['lat' in k for k in kwargs]) == 1 and np.sum(['lon' in k for k in kwargs]) == 1:
         # If lat/lon exist as 1D coordinates, make them dimensions to be able to interpolate
-        
+            #XI_ETA = False
+            
             L1, L2 = var[dim1], var[dim2]
             L1_rho, L2_rho = pm[dim1_rho], pm[dim2_rho]
             xi = [dim for dim in var.dims if 'xi' in dim][0]
@@ -652,39 +664,68 @@ def vslice(croco_ds, var, **kwargs):
             changedims = {}
             changedims_rho = {}
 
-            if L1.diff(dim=xi).sum().data == 0:
+            if L1.diff(dim=xi).sum().data == 0 and L2.diff(dim=eta).sum().data == 0:
                 var.coords[dim1] = ((eta), L1.isel(**{xi:0}))
                 pm.coords[dim1_rho] = ((eta_rho), L1_rho.isel(**{xi_rho:0}))
                 pn.coords[dim1_rho] = ((eta_rho), L1_rho.isel(**{xi_rho:0}))
                 changedims[eta] = dim1
                 changedims_rho[eta_rho] = dim1_rho
-            elif L1.diff(dim=eta).sum().data == 0:
-                var.coords[dim1] = ((xi), L1.isel(**{eta:0}))
-                pm.coords[dim1_rho] = ((xi_rho), L1_rho.isel(**{eta_rho:0}))
-                pn.coords[dim1_rho] = ((xi_rho), L1_rho.isel(**{eta_rho:0}))
-                changedims[xi] = dim1
-                changedims_rho[xi_rho] = dim1_rho
-            else:
-                raise NotImplementedError('Interpolating on a rotated or curvilinear lat/lon grid not yet supported. \nPlease specify the section on the eta/xi grid.')
-
-            if L2.diff(dim=xi).sum().data == 0:
-                var.coords[dim2] = ((eta), L2.isel(**{xi:0}))
-                pm.coords[dim2_rho] = ((eta_rho), L2_rho.isel(**{xi_rho:0}))
-                pn.coords[dim2_rho] = ((eta_rho), L2_rho.isel(**{xi_rho:0}))
-                changedims[eta] = dim2
-                changedims_rho[eta_rho] = dim2_rho
-            elif L2.diff(dim=eta).sum().data == 0:
                 var.coords[dim2] = ((xi), L2.isel(**{eta:0}))
                 pm.coords[dim2_rho] = ((xi_rho), L2_rho.isel(**{eta_rho:0}))
                 pn.coords[dim2_rho] = ((xi_rho), L2_rho.isel(**{eta_rho:0}))
                 changedims[xi] = dim2
                 changedims_rho[xi_rho] = dim2_rho
+                
+                # Swap the xi/eta for lat/lon dimensions
+                var = var.swap_dims(changedims)
+                pm = pm.swap_dims(changedims_rho)
+                pn = pn.swap_dims(changedims_rho)
+                
+                Xgrid_dist = np.diff(var[xi].interp(**interpdim2).values)
+                Ygrid_dist = np.diff(var[eta].interp(**interpdim1).values)
+                
+            elif L1.diff(dim=eta).sum().data == 0 and L2.diff(dim=xi).sum().data == 0:
+                var.coords[dim1] = ((xi), L1.isel(**{eta:0}))
+                pm.coords[dim1_rho] = ((xi_rho), L1_rho.isel(**{eta_rho:0}))
+                pn.coords[dim1_rho] = ((xi_rho), L1_rho.isel(**{eta_rho:0}))
+                changedims[xi] = dim1
+                changedims_rho[xi_rho] = dim1_rho
+                var.coords[dim2] = ((eta), L2.isel(**{xi:0}))
+                pm.coords[dim2_rho] = ((eta_rho), L2_rho.isel(**{xi_rho:0}))
+                pn.coords[dim2_rho] = ((eta_rho), L2_rho.isel(**{xi_rho:0}))
+                changedims[eta] = dim2
+                changedims_rho[eta_rho] = dim2_rho
+                
+                # Swap the xi/eta for lat/lon dimensions
+                var = var.swap_dims(changedims)
+                pm = pm.swap_dims(changedims_rho)
+                pn = pn.swap_dims(changedims_rho)
+            
+                Xgrid_dist = np.diff(var[xi].interp(**interpdim1).values)
+                Ygrid_dist = np.diff(var[eta].interp(**interpdim2).values)
+                
             else:
                 raise NotImplementedError('Interpolating on a rotated or curvilinear lat/lon grid not yet supported. \nPlease specify the section on the eta/xi grid.')
+      
+                
+#             if L2.diff(dim=xi).sum().data == 0:
+#                 var.coords[dim2] = ((eta), L2.isel(**{xi:0}))
+#                 pm.coords[dim2_rho] = ((eta_rho), L2_rho.isel(**{xi_rho:0}))
+#                 pn.coords[dim2_rho] = ((eta_rho), L2_rho.isel(**{xi_rho:0}))
+#                 changedims[eta] = dim2
+#                 changedims_rho[eta_rho] = dim2_rho
+#             elif L2.diff(dim=eta).sum().data == 0:
+#                 var.coords[dim2] = ((xi), L2.isel(**{eta:0}))
+#                 pm.coords[dim2_rho] = ((xi_rho), L2_rho.isel(**{eta_rho:0}))
+#                 pn.coords[dim2_rho] = ((xi_rho), L2_rho.isel(**{eta_rho:0}))
+#                 changedims[xi] = dim2
+#                 changedims_rho[xi_rho] = dim2_rho
+#             else:
+#                 raise NotImplementedError('Interpolating on a rotated or curvilinear lat/lon grid not yet supported. \nPlease specify the section on the eta/xi grid.')
 
-            var = var.swap_dims(changedims)
-            pm = pm.swap_dims(changedims_rho)
-            pn = pn.swap_dims(changedims_rho)
+#             var = var.swap_dims(changedims)
+#             pm = pm.swap_dims(changedims_rho)
+#             pn = pn.swap_dims(changedims_rho)
 
         else:
             raise TypeError('Please specify either xi/eta or lat/lon dimensions')
@@ -694,19 +735,19 @@ def vslice(croco_ds, var, **kwargs):
     if "s_rho" not in var.coords:
         raise ValueError("Section requires vertical dimension s_rho")
 
-    Npoints = len(X)
-
-    # Make temporary DataArrays for initial interpolations
-    X0 = xr.DataArray(X, dims=["distance"])
-    Y0 = xr.DataArray(Y, dims=["distance"])
-    interpdict = {dim1:X0, dim2:Y0}
-
+#     if XI_ETA:
+#         Xgrid_dist = np.diff(X)
+#         Ygrid_dist = np.diff(Y)
+#     else:
+#         # TODO: Make this robust against order of dimensions!
+#         Xgrid_dist = np.diff(var[xi].interp(**interpdim2).values)
+#         Ygrid_dist = np.diff(var[eta].interp(**interpdim1).values)
+    
     # Distance between section points
-    pmn_interpdict = {dim1_rho:X0, dim2_rho:Y0}
-    pm = pm.interp(**pmn_interpdict).values
-    pn = pn.interp(**pmn_interpdict).values
-    dX = 2 * np.diff(X) / (pm[:-1] + pm[1:])
-    dY = 2 * np.diff(Y) / (pn[:-1] + pn[1:])
+    pm = pm.interp(**rho_interpdict).values
+    pn = pn.interp(**rho_interpdict).values
+    dX = 2 * Xgrid_dist / (pm[:-1] + pm[1:])
+    dY = 2 * Ygrid_dist / (pn[:-1] + pn[1:])
     dS = np.sqrt(dX * dX + dY * dY)
     # Cumulative distance along the section
     distance = np.concatenate(([0], np.cumsum(dS))) / 1000.0  # unit = km
