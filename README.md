@@ -12,9 +12,10 @@ conda install xarray numpy scipy cartopy
 conda install -c conda-forge xgcm
 ```
 
-Next, clone this repository to a directory of your choice with 
+Next, clone this repository to a directory of your choice (e.g. `/Users/your-username/your-code-folder/`) with 
 
 ```
+cd /Users/your-username/your-code-folder/
 git clone https://github.com/jaard/xcroco.git
 ```
 
