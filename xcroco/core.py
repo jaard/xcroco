@@ -63,6 +63,12 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
             except KeyError:
                 pass
         da2 = da
+        
+    # Overwrite xi / eta variables in case they are not continuous
+    da2.xi_rho.data = np.arange(da2.xi_rho.shape[0])
+    da2.xi_u.data = np.arange(da2.xi_u.shape[0])
+    da2.eta_rho.data = np.arange(da2.eta_rho.shape[0])
+    da2.eta_v.data = np.arange(da2.eta_v.shape[0])
 
     # move lat/lon to coordinates
     latlon_vars = [v for v in list(da2.data_vars) if 'lat' in v or 'lon' in v]
@@ -524,6 +530,91 @@ def vinterp(var, z, depth):
     return vnew
 
 
+def vinterp_anyvar(var, g, g_slice):
+
+    '''
+    function  vnew = vinterp(var, g, g_slice)
+
+    This function interpolates a 3D variable on a horizontal level of constant
+    variable g
+
+    Parameters
+    ----------
+    var       xr.DataArray
+              Variable to process (3D matrix).
+    g         xr.DataArray
+              Grid variable on which to slice (3D matrix).
+    g_slice   g value of Slice
+
+    Returns
+    -------
+    vnew    xr.DataArray
+            Horizontal slice (2D matrix).
+    '''
+
+    if var.shape != g.shape:
+        g = g.transpose(*var.dims)
+        if var.shape != g.shape:
+            raise ValueError('Shape mismatch between Variable and Grid arrays')
+
+    vertical_dim = get_vertical_dimension(var)
+    N = len(var[vertical_dim])
+
+    if isinstance(g_slice,list):
+        # Loop over g_slice list
+        gslice_list = []
+        for dd in g_slice:
+            # Find the grid position of the nearest vertical levels
+            levs = (g < dd).sum(vertical_dim)
+            levs = levs.where(levs<N, other=N-1)
+            levs.load()
+            # Do the interpolation
+            g1 = g.isel(**{str(vertical_dim):levs})
+            g2 = g.isel(**{str(vertical_dim):levs-1})
+            v1 = var.isel(**{str(vertical_dim):levs})
+            v2 = var.isel(**{str(vertical_dim):levs-1})
+            vnew = ((v1-v2)*dd + v2*g1 - v1*g2) / (g1-g2)
+            vnew = vnew.where(levs>0)
+            
+            vnew.coords[g.name] = dd
+            vnew = vnew.expand_dims(g.name)
+
+            zslice_list.append(vnew)
+        
+        vnew = xr.concat(gslice_list, dim=g.name)
+        
+        #raise NotImplementedError('Interpolation on full 3D grid not implemented yet')
+
+    else:
+        # Find the grid position of the nearest vertical levels
+        levs = (g < g_slice).sum(vertical_dim)
+        levs = levs.where(levs<N, other=N-1)
+        #levs = levs.where(levs>0) # <-- invalid indexer array, no integer
+
+        #warnings.warn('{} MB will be loaded into memory!'.format(levs.nbytes*1e-6),Warning)
+        levs.load()
+        # Do the interpolation
+        g1 = g.isel(**{str(vertical_dim):levs})
+        g2 = g.isel(**{str(vertical_dim):levs-1})
+        v1 = var.isel(**{str(vertical_dim):levs})
+        v2 = var.isel(**{str(vertical_dim):levs-1})
+
+        vnew = ((v1-v2)*g_slice + v2*g1 - v1*g2) / (g1-g2)
+        vnew = vnew.where(levs>0)
+        #vnew = mask(vnew)
+        vnew.coords[g.name] = g_slice
+    
+ #   vnew.coords['z'].attrs['long_name'] = 'g_slice of Z-levels'
+ #   vnew.coords['z'].name = 'z'
+ #   vnew.coords['z'].attrs['units'] = 'meter'
+ #   vnew.coords['z'].attrs['field'] = 'g_slice, scalar, series'
+ #   vnew.coords['z'].attrs['standard_name'] = 'g_slice'
+ #   vnew.attrs = var.attrs
+
+    return vnew
+
+
+
 def mask(croco_ds, var):
 
     '''
@@ -554,17 +645,10 @@ def hslice(croco_ds, var, level):
     Parameters
     ----------
     var     xarray.DataArray
-            3D or 4D array
-    level    vertical level of the slice (scalar):
-         level =   integer >= 1 and <= N
-                   take a slice along a s level (N=top))
-         level =   real < 0
-                   interpole a horizontal slice at z=level
-    typ    type of the variable (character):
-         r for 'rho' for zeta, temp, salt, w(!)
-         w for 'w'   for AKt
-         u for 'u'   for u, ubar
-         v for 'v'   for v, vbar
+            3D or 4D variable array
+            
+    level   real < 0 or real > 0 
+            vertical level of the slice (scalar), interpolate a horizontal slice at z=level
 
     Returns
     -------
@@ -574,44 +658,31 @@ def hslice(croco_ds, var, level):
 
     vertical_dim = get_vertical_dimension(var)
 
-    if level == 0:
-        #
-        # 2D variable
-        #
-        vnew = var
-        warnings.warn('Please specify a positive or negative number', Warning)
-    elif level > 0:
-        #
-        # Get a sigma level of a 3D variable
-        #
-        vnew = var.isel(**{str(vertical_dim):level})
-        vnew.coords['sigma_level'] = np.array(level).astype('int32')
+    #
+    # Get a horizontal level of a 3D variable
+    #
+
+    # Get the depths of the sigma levels
+    z = get_depths(croco_ds, var)
+
+    # Do the interpolation
+    if 'time' in var.dims and var.time.shape[0] > 1:
+        timesteps = var.time.shape[0]
+        print("Looping over time dimension...")
+        slicelist = []
+        update_progress(0)
+        for tt in range(timesteps):
+            timesl = vinterp(var.isel(time=tt), z.isel(time=tt), level)
+            try:
+                timesl.compute()
+            except AttributeError:
+                pass
+            slicelist.append(timesl)
+            update_progress((tt+1)/timesteps)
+        vnew = xr.concat(slicelist, dim='time')
     else:
-        #
-        # Get a horizontal level of a 3D variable
-        #
-        
-        # Get the depths of the sigma levels
-        z = get_depths(croco_ds, var)
-        
-        # Do the interpolation
-        if 'time' in var.dims and var.time.shape[0] > 1:
-            timesteps = var.time.shape[0]
-            print("Looping over time dimension...")
-            slicelist = []
-            update_progress(0)
-            for tt in range(timesteps):
-                timesl = vinterp(var.isel(time=tt), z.isel(time=tt), level)
-                try:
-                    timesl.compute()
-                except AttributeError:
-                    pass
-                slicelist.append(timesl)
-                update_progress((tt+1)/timesteps)
-            vnew = xr.concat(slicelist, dim='time')
-        else:
-            vnew = vinterp(var, z, level)
-        vnew.coords['depth'] = np.array(level).astype('float32')
+        vnew = vinterp(var, z, level)
+    vnew.coords['depth'] = np.array(level).astype('float32')
         
     vnew = mask(croco_ds, vnew)
     vnew.attrs = var.attrs
@@ -647,13 +718,11 @@ def vslice(croco_ds, var, **kwargs):
         rho_interpdict = {dim1_rho:X0, dim2_rho:Y0}
 
         if np.sum(['xi' in k or 'eta' in k for k in kwargs]) == 2:
-            #XI_ETA = True
             Xgrid_dist = np.diff(X)
             Ygrid_dist = np.diff(Y)
         
         elif np.sum(['lat' in k for k in kwargs]) == 1 and np.sum(['lon' in k for k in kwargs]) == 1:
         # If lat/lon exist as 1D coordinates, make them dimensions to be able to interpolate
-            #XI_ETA = False
             
             L1, L2 = var[dim1], var[dim2]
             L1_rho, L2_rho = pm[dim1_rho], pm[dim2_rho]
@@ -706,26 +775,6 @@ def vslice(croco_ds, var, **kwargs):
                 
             else:
                 raise NotImplementedError('Interpolating on a rotated or curvilinear lat/lon grid not yet supported. \nPlease specify the section on the eta/xi grid.')
-      
-                
-#             if L2.diff(dim=xi).sum().data == 0:
-#                 var.coords[dim2] = ((eta), L2.isel(**{xi:0}))
-#                 pm.coords[dim2_rho] = ((eta_rho), L2_rho.isel(**{xi_rho:0}))
-#                 pn.coords[dim2_rho] = ((eta_rho), L2_rho.isel(**{xi_rho:0}))
-#                 changedims[eta] = dim2
-#                 changedims_rho[eta_rho] = dim2_rho
-#             elif L2.diff(dim=eta).sum().data == 0:
-#                 var.coords[dim2] = ((xi), L2.isel(**{eta:0}))
-#                 pm.coords[dim2_rho] = ((xi_rho), L2_rho.isel(**{eta_rho:0}))
-#                 pn.coords[dim2_rho] = ((xi_rho), L2_rho.isel(**{eta_rho:0}))
-#                 changedims[xi] = dim2
-#                 changedims_rho[xi_rho] = dim2_rho
-#             else:
-#                 raise NotImplementedError('Interpolating on a rotated or curvilinear lat/lon grid not yet supported. \nPlease specify the section on the eta/xi grid.')
-
-#             var = var.swap_dims(changedims)
-#             pm = pm.swap_dims(changedims_rho)
-#             pn = pn.swap_dims(changedims_rho)
 
         else:
             raise TypeError('Please specify either xi/eta or lat/lon dimensions')
@@ -735,14 +784,6 @@ def vslice(croco_ds, var, **kwargs):
     if "s_rho" not in var.coords:
         raise ValueError("Section requires vertical dimension s_rho")
 
-#     if XI_ETA:
-#         Xgrid_dist = np.diff(X)
-#         Ygrid_dist = np.diff(Y)
-#     else:
-#         # TODO: Make this robust against order of dimensions!
-#         Xgrid_dist = np.diff(var[xi].interp(**interpdim2).values)
-#         Ygrid_dist = np.diff(var[eta].interp(**interpdim1).values)
-    
     # Distance between section points
     pm = pm.interp(**rho_interpdict).values
     pn = pn.interp(**rho_interpdict).values
