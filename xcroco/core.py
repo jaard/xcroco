@@ -64,11 +64,17 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
                 pass
         da2 = da
         
-    # Overwrite xi / eta variables in case they are not continuous
-    da2.xi_rho.data = np.arange(da2.xi_rho.shape[0])
-    da2.xi_u.data = np.arange(da2.xi_u.shape[0])
-    da2.eta_rho.data = np.arange(da2.eta_rho.shape[0])
-    da2.eta_v.data = np.arange(da2.eta_v.shape[0])
+    # Overwrite xi / eta variables in case they are not continuousv
+    for co in ['xi_rho','xi_u','eta_rho','eta_v']:
+        co_attr = da2[co].attrs
+        da2.coords['a'] = (co, np.arange(da2[co].shape[0]).astype('float'))
+        da2 = da2.set_index(**{co:'a'})
+        da2[co].attrs = co_attr
+    
+    #da2.xi_rho.data = (np.arange(da2.xi_rho.shape[0])+1).astype('float')
+    #da2.xi_u.data = (np.arange(da2.xi_u.shape[0])+1).astype('float')
+    #da2.eta_rho.data = (np.arange(da2.eta_rho.shape[0])+1).astype('float')
+    #da2.eta_v.data = (np.arange(da2.eta_v.shape[0])+1).astype('float')
 
     # move lat/lon to coordinates
     latlon_vars = [v for v in list(da2.data_vars) if 'lat' in v or 'lon' in v]
