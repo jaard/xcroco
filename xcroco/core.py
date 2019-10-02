@@ -26,6 +26,16 @@ def update_progress(progress):
     sys.stdout.flush()
     if progress == 1:
         print('\n')
+        
+def get_rhovar(D):
+    maxdims = np.max(np.array([len(D[var].dims) for var in list(D.data_vars)]))
+    ll = list(D.data_vars)
+    for var in ll:
+        vardims = D[var].dims
+        if 'eta_rho' in vardims and 'xi_rho' in vardims and len(vardims) == maxdims:
+            rhovar = var
+            break
+    return rhovar
     
 def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
 
@@ -118,7 +128,8 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
         da2['hc'] = da2.Tcline
     
     # Define Z coordinates
-    da2.coords['z_rho'] = zlevs(da2, da2.temp)
+    rhovar = get_rhovar(da2)
+    da2.coords['z_rho'] = zlevs(da2, da2[rhovar])
     
     zr = da2['z_rho']
     zr.name = 'z_rho'
