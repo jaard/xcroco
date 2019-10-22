@@ -74,17 +74,12 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
                 pass
         da2 = da
         
-    # Overwrite xi / eta variables in case they are not continuousv
+    # Overwrite xi / eta variables in case they are not continuous
     for co in ['xi_rho','xi_u','eta_rho','eta_v']:
         co_attr = da2[co].attrs
         da2.coords['a'] = (co, np.arange(da2[co].shape[0]).astype('float'))
         da2 = da2.set_index(**{co:'a'})
         da2[co].attrs = co_attr
-    
-    #da2.xi_rho.data = (np.arange(da2.xi_rho.shape[0])+1).astype('float')
-    #da2.xi_u.data = (np.arange(da2.xi_u.shape[0])+1).astype('float')
-    #da2.eta_rho.data = (np.arange(da2.eta_rho.shape[0])+1).astype('float')
-    #da2.eta_v.data = (np.arange(da2.eta_v.shape[0])+1).astype('float')
 
     # move lat/lon to coordinates
     latlon_vars = [v for v in list(da2.data_vars) if 'lat' in v or 'lon' in v]
@@ -128,18 +123,17 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
         da2['hc'] = da2.Tcline
     
     # Define Z coordinates
-    rhovar = get_rhovar(da2)
-    da2.coords['z_rho'] = zlevs(da2, da2[rhovar])
-    
-    zr = da2['z_rho']
-    zr.name = 'z_rho'
-    zr.attrs['long_name'] = 'depth at RHO-points'
-    zr.attrs['units'] = 'meter'
-    zr.attrs['field'] = 'depth, scalar, series'
-    zr.attrs['positive'] = 'up'
-    zr.attrs['standard_name'] = 'depth'
+    da2.coords['z_rho'] = zlevs(da2, 'r')
+    da2.coords['z_w'] = zlevs(da2, 'w')
+    da2.coords['z_u'] = rho2var(da2, da2.z_rho, da2.u)
+    da2['z_u'].attrs['long_name'] = 'depth at U-points'
+    da2['z_u'].name = 'z_u'
+    da2.coords['z_v'] = rho2var(da2, da2.z_rho, da2.v)
+    da2['z_v'].attrs['long_name'] = 'depth at V-points'
+    da2['z_v'].name = 'z_v'
 
     return da2
+
 
 def csf(croco_dataset, sc):
 
@@ -158,13 +152,15 @@ def csf(croco_dataset, sc):
 
     return h
 
+
 def get_vertical_dimension(var):
     try:
         return [d for d in var.dims if 's_' in d][0]
     except IndexError:
         raise IndexError('{} is a 2D-H variable'.format(var.name))
 
-def zlevs(croco_ds, var, **kwargs):
+
+def zlevs(croco_ds, typ, **kwargs):
 
     '''
     this method computes the depth of rho or w points for ROMS
@@ -173,41 +169,35 @@ def zlevs(croco_ds, var, **kwargs):
     ----------
     croco_ds: xr.Dataset
               Provides the variables h and zeta
-    var : xr.DataArray
-          on arbitrary grid (rho, u, v or w)
+    typ : String
+          'r' for rho-grid or 'w' for w-grid
 
     Returns
     -------
     z : xr.DataArray
         Depths (m) of RHO- or W-points (3D matrix).
     '''
-
-    if 's_w' in var.dims:
-        typ = 'w'
+    
+    if typ is 'w':
+        vertical_dim = 's_w'
     else:
-        typ = 'r'
+        vertical_dim = 's_rho'
         
-    input_dims = var.dims
-    input_dims = ['xi_rho' if x=='xi_u' else x for x in input_dims]
-    input_dims = ['eta_rho' if x=='eta_v' else x for x in input_dims]
-
+    if kwargs and 'zeta' in kwargs:
+        zeta = kwargs['zeta']
+    else:
+        zeta = croco_ds.zeta
+    
+    # Create output dimensions of correct shape
+    dims = list((croco_ds[vertical_dim] * zeta).dims)
+    output_dims = tuple([a for a in dims if 'time' in a] + [a for a in dims if 'time' not in a])
     h = croco_ds.h
+
     try:
         hc = croco_ds.hc.isel(time=0).data
     except ValueError:
         hc = croco_ds.hc.data
     N = croco_ds.s_rho.size
-
-    # find zeta time slices that correspond to input array
-    # check time dim so it works with time averages
-    if kwargs and 'zeta' in kwargs:
-        zeta = kwargs['zeta']
-    elif 'time' in var.dims:
-        zeta = croco_ds.zeta.sel(time=var.time)
-    elif 'time' in croco_ds.zeta.dims:
-        zeta = croco_ds.zeta.mean('time')
-    else:
-        zeta = croco_ds.zeta
 
     hshape = np.shape(h)
     if len(hshape) == 1:
@@ -232,7 +222,7 @@ def zlevs(croco_ds, var, **kwargs):
     Cs_r = np.zeros([N, 1])
     sc_w = np.zeros([N+1, 1])
     Cs_w = np.zeros([N+1, 1])
-
+            
     if vtransform == 2:
         ds = 1 / N
         if typ is 'w':
@@ -273,25 +263,7 @@ def zlevs(croco_ds, var, **kwargs):
     hinv = 1. / h
 
     # initialize z as xr.DataArray
-    #TODO: include option to choose dask array here
-    if typ is 'w':
-        z = xr.zeros_like(var)
-        z.attrs['long_name'] = 'depth at W-points'
-        z.name = 'z_w'
-    else:
-        if 'time' in var.dims:
-            z = xr.zeros_like(croco_ds.temp.sel(time=var.time))
-        elif 'time' in croco_ds.temp.dims:
-            z = xr.zeros_like(croco_ds.temp.mean('time'))
-        else:
-            z = xr.zeros_like(croco_ds.temp)
-        z.attrs['long_name'] = 'depth at RHO-points'
-        z.name = 'z_rho'
-    z.attrs['units'] = 'meter'
-    z.attrs['field'] = 'depth, scalar, series'
-    z.attrs['standard_name'] = 'depth'
-
-    vertical_dim = get_vertical_dimension(var)
+    z = xr.zeros_like(zeta * croco_ds[vertical_dim])
 
     if vtransform == 2:
         if typ is 'w':
@@ -311,7 +283,7 @@ def zlevs(croco_ds, var, **kwargs):
 
         z0 = cff_xr + cff1_xr * h
         z = zeta * (1. + z0 * h2inv) + z0 * h / h2
-        z = z.transpose(*input_dims)
+        z = z.transpose(*output_dims)
 
     elif vtransform == 1:
         cff1 = Cs
@@ -325,7 +297,17 @@ def zlevs(croco_ds, var, **kwargs):
 
         z0 = cff_xr + cff1_xr * h
         z = zeta * (1. + z0 * hinv) + z0
-        z = z.transpose(*input_dims)
+        z = z.transpose(*output_dims)
+        
+    if typ is 'w':
+        z.attrs['long_name'] = 'depth at W-points'
+        z.name = 'z_w'
+    else:
+        z.attrs['long_name'] = 'depth at RHO-points'
+        z.name = 'z_rho'
+    z.attrs['units'] = 'meter'
+    z.attrs['field'] = 'depth, scalar, series'
+    z.attrs['standard_name'] = 'depth'
 
     return z
 
@@ -413,7 +395,10 @@ def get_depths(croco_ds, var):
         Depths (m) of RHO- or W-points (3D matrix).
     '''
 
-    depths = zlevs(croco_ds, var)
+    if 's_w' in var.dims:
+        depths = zlevs(croco_ds, 'w')
+    else:
+        depths = zlevs(croco_ds, 'r')
     if any(dimension in var.dims for dimension in ['eta_v','xi_u']):
         depths = rho2var(croco_ds, depths, var)
 
