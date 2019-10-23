@@ -42,7 +42,8 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
     if isinstance(model_output, xr.Dataset):
         da = model_output
     else:
-        da = xr.open_mfdataset(model_output)
+        da = xr.open_mfdataset(model_output, decode_times=False, decode_cf=False)
+        da = xr.decode_cf(da)
     
     # Check if a separate grid file was supplied,
     # if this is the case load & merge with output file
