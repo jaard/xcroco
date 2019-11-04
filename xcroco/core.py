@@ -10,32 +10,6 @@ import cartopy.crs as ccrs
 import glob
 import time, sys
 
-def update_progress(progress):
-    bar_length = 40
-    if isinstance(progress, int):
-        progress = float(progress)
-    if not isinstance(progress, float):
-        progress = 0
-    if progress < 0:
-        progress = 0
-    if progress >= 1:
-        progress = 1
-    block = int(round(bar_length * progress))
-    text = "[{0}] {1:.1f}%".format( "#" * block + "-" * (bar_length - block), progress * 100)
-    sys.stdout.write("\r" + str(text))
-    sys.stdout.flush()
-    if progress == 1:
-        print('\n')
-        
-def get_rhovar(D):
-    maxdims = np.max(np.array([len(D[var].dims) for var in list(D.data_vars)]))
-    ll = list(D.data_vars)
-    for var in ll:
-        vardims = D[var].dims
-        if 'eta_rho' in vardims and 'xi_rho' in vardims and len(vardims) == maxdims:
-            rhovar = var
-            break
-    return rhovar
     
 def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
 
@@ -623,7 +597,6 @@ def vinterp_anyvar(var, g, g_slice):
     return vnew
 
 
-
 def mask(croco_ds, var):
 
     '''
@@ -824,3 +797,21 @@ def vslice(croco_ds, var, **kwargs):
     B0['z_rho'] = B0['z_rho'].transpose(*dimlist)
     
     return B0
+
+
+def update_progress(progress):
+    bar_length = 40
+    if isinstance(progress, int):
+        progress = float(progress)
+    if not isinstance(progress, float):
+        progress = 0
+    if progress < 0:
+        progress = 0
+    if progress >= 1:
+        progress = 1
+    block = int(round(bar_length * progress))
+    text = "[{0}] {1:.1f}%".format( "#" * block + "-" * (bar_length - block), progress * 100)
+    sys.stdout.write("\r" + str(text))
+    sys.stdout.flush()
+    if progress == 1:
+        print('\n')
