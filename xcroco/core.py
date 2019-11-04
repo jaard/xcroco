@@ -218,25 +218,24 @@ def zlevs(croco_ds, typ, **kwargs):
             warnings.warn('Default S-coordinate system use : Vtransform = 1 (old one)', Warning)
 
     # Set S-Curves in domain [-1 < sc < 0] at vertical W- and RHO-points.
-
-    sc_r = np.zeros([N, 1])
-    Cs_r = np.zeros([N, 1])
-    sc_w = np.zeros([N+1, 1])
-    Cs_w = np.zeros([N+1, 1])
+    
+    sc_r = np.zeros([N])
+    Cs_r = np.zeros([N])
+    sc_w = np.zeros([N+1])
+    Cs_w = np.zeros([N+1])
             
     if vtransform == 2:
-        ds = 1 / N
         if typ is 'w':
             sc_w[0] = -1.0
             sc_w[N] = 0
             Cs_w[0] = -1.0
             Cs_w[N] = 0
-            sc_w[1:N] = ds * (np.arange(1, N) - N)
-            Cs_w = csf(sc_w)
+            sc_w[1:N] = (np.arange(1, N) - N) / N
+            Cs_w = csf(croco_ds, sc_w)
             N += 1
-     
-            sc = ds * (np.arange(1, N+1)-N-0.5)
-            Cs_r = csf(sc)
+        else:
+            sc = (np.arange(1, N+1)-N-0.5) / N
+            Cs_r = csf(croco_ds, sc)
             sc_r = sc
 
     elif vtransform == 1:
@@ -270,10 +269,14 @@ def zlevs(croco_ds, typ, **kwargs):
         if typ is 'w':
             cff1 = Cs_w
             cff2 = sc_w+1
+            sc = xr.DataArray(sc_w, dims=(vertical_dim))
+            Cs = xr.DataArray(Cs_w, dims=(vertical_dim))
             sc = sc_w
         else:
             cff1 = Cs_r
             cff2 = sc_r+1
+            sc = xr.DataArray(sc_r, dims=(vertical_dim))
+            Cs = xr.DataArray(Cs_r, dims=(vertical_dim))
             sc = sc_r
 
         h2 = (h+hc)
@@ -356,13 +359,13 @@ def rho2var(croco_ds, var_rho, var_target):
     grid = croco_ds.attrs['xgcm-Grid']
 
     if 'xi_u' in var_target.dims:
-        var = grid.interp(var_rho,'X')
+        var = grid.interp(var_rho,'X', boundary='extend')
         add_coords(croco_ds, var, ['lat_u','lon_u'])
         var.attrs = var_rho.attrs
         var.name = var_rho.name
         var.attrs['long_name'] = '{} at U-points'.format(var.name)
     elif 'eta_v' in var_target.dims:
-        var = grid.interp(var_rho,'Y')
+        var = grid.interp(var_rho,'Y', boundary='extend')
         add_coords(croco_ds, var, ['lat_v','lon_v'])
         var.attrs = var_rho.attrs
         var.name = var_rho.name
