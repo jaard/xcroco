@@ -51,20 +51,30 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
         
     # Overwrite xi / eta variables in case they are not continuous
     for co in ['xi_rho','xi_u','eta_rho','eta_v']:
+        if co not in da2.coords:
+            continue  # untested for now! TODO: test if it works for dataset without u,v
         co_attr = da2[co].attrs
         da2.coords['a'] = (co, np.arange(da2[co].shape[0]).astype('float'))
         da2 = da2.set_index(**{co:'a'})
         da2[co].attrs = co_attr
 
-    # move lat/lon to coordinates
+    # move lat/lon to from data variables to coordinates
     latlon_vars = [v for v in list(da2.data_vars) if 'lat' in v or 'lon' in v]
     for v in latlon_vars:
         da2.coords[v] = da2[v]
-        #da2 = da2.drop(v)
+    
+    # Remove time dimension from lat/lon coordinates, if present
+    latlon_coords = [v for v in list(da2.coords) if 'lat' in v or 'lon' in v]
+    for v in latlon_coords:
+        v_da = da2.coords[v]
+        if time_dim in v_da.dims:
+            v_da = v_da.isel(**{time_dim:0})
+            da2.coords[v] = v_da.drop('time')
+    
+    # Copy attrs and create XGCM-grid object
     da2.attrs = da.attrs
     da2.attrs['xgcm-Grid'] = Grid(da2, periodic=False)
 
-    
     # Read grid parameters depending on version
     # TODO: See how this version checking (taken from ROMSTOOLS) is done in the new official CROCOTOOLS 
     if np.size(da2.Tcline) is 0:
@@ -380,6 +390,9 @@ def get_depths(croco_ds, var):
     if any(dimension in var.dims for dimension in ['eta_v','xi_u']):
         depths = rho2var(croco_ds, depths, var)
 
+    if 'time' in depths.dims:
+        depths = depths.sel(time=var.time)
+    
     return depths
 
 
@@ -450,9 +463,10 @@ def vinterp(var, z, depth):
     depth = valid_levels(depth)
 
     if var.shape != z.shape:
-        #display(var)
-        #display(z)
-        z = z.transpose(*var.dims)
+        try:
+            z = z.transpose(*var.dims)
+        except ValueError:
+            raise ValueError('Number of dimensions mismatch between Variable and Depth arrays')
         if var.shape != z.shape:
             raise ValueError('Shape mismatch between Variable and Depth arrays')
 
