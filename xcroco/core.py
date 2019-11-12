@@ -7,6 +7,7 @@ from typing import Sequence
 import dask
 import warnings
 import cartopy.crs as ccrs
+import cartopy.geodesic as cgeo
 import glob
 import time, sys
 
@@ -16,7 +17,7 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
     if isinstance(model_output, xr.Dataset):
         da = model_output
     else:
-        da = xr.open_mfdataset(model_output, decode_times=False, decode_cf=False)
+        da = xr.open_mfdataset(model_output, decode_times=False, decode_cf=False, combine='by_coords')
         da = xr.decode_cf(da)
     
     # Check if a separate grid file was supplied,
@@ -99,23 +100,25 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
             vtrans = da2.Vtransform
             if vtrans.size is not 0:
                 if vtrans.size == 1:
-                    da2.attrs.s_coord = int(vtrans)
+                    da2.attrs['s_coord'] = int(vtrans)
                 else:
-                    da2.attrs.s_coord = int(vtrans[0])
+                    da2.attrs['s_coord'] = int(vtrans[0])
         except KeyError:
-            da2.attrs.s_coord = 1
-    if da2.attrs.s_coord == 2:
+            da2.attrs['s_coord'] = 1
+    if da2.attrs['s_coord'] == 2:
         da2['hc'] = da2.Tcline
     
     # Define Z coordinates
     da2.coords['z_rho'] = zlevs(da2, 'r')
     da2.coords['z_w'] = zlevs(da2, 'w')
-    da2.coords['z_u'] = rho2var(da2, da2.z_rho, da2.u)
-    da2['z_u'].attrs['long_name'] = 'depth at U-points'
-    da2['z_u'].name = 'z_u'
-    da2.coords['z_v'] = rho2var(da2, da2.z_rho, da2.v)
-    da2['z_v'].attrs['long_name'] = 'depth at V-points'
-    da2['z_v'].name = 'z_v'
+    if 'xi_u' in da2.dims:
+        da2.coords['z_u'] = rho2var(da2, da2.z_rho, da2.u)
+        da2['z_u'].attrs['long_name'] = 'depth at U-points'
+        da2['z_u'].name = 'z_u'
+    if 'eta_v' in da2.dims:
+        da2.coords['z_v'] = rho2var(da2, da2.z_rho, da2.v)
+        da2['z_v'].attrs['long_name'] = 'depth at V-points'
+        da2['z_v'].name = 'z_v'
 
     return da2
 
@@ -136,6 +139,94 @@ def csf(croco_dataset, sc):
         h = csrf
 
     return h
+
+
+def get_coastline_from_mask(croco_ds):
+    
+    '''
+    Create a coastline from the RHO mask
+    
+    Parameters
+    ----------
+    croco_ds: xr.Dataset
+              Provides the variables mask_rho, lon_rho, lat_rho
+    '''
+
+    maskdims = croco_ds.mask_rho.dims
+
+    dxi = croco_ds.mask_rho.diff(maskdims[1])
+    dxi_land2sea = dxi.where(dxi>0, other=0)
+    dxi_land2sea.coords[maskdims[1]] = (np.arange(dxi_land2sea.mean(maskdims[0]).size)).astype(float)
+    dxi_sea2land = dxi.where(dxi<0, other=0)*-1
+    dxi_sea2land.coords[maskdims[1]] = (np.arange(dxi_sea2land.mean(maskdims[0]).size)+1).astype(float)
+    xi_coast = (dxi_land2sea + dxi_sea2land)
+    xi_coast.coords[maskdims[0]] = (np.arange(dxi_land2sea.mean(maskdims[1]).size)).astype(float)
+
+    deta = croco_ds.mask_rho.diff(maskdims[0])
+    deta_land2sea = deta.where(deta>0, other=0)
+    deta_land2sea.coords[maskdims[0]] = (np.arange(deta_land2sea.mean(maskdims[1]).size)).astype(float)
+    deta_sea2land = deta.where(deta<0, other=0)*-1
+    deta_sea2land.coords[maskdims[0]] = (np.arange(deta_sea2land.mean(maskdims[1]).size)+1).astype(float)
+    eta_coast = (deta_land2sea + deta_sea2land)
+    eta_coast.coords[maskdims[1]] = (np.arange(deta_land2sea.mean(maskdims[0]).size)).astype(float)
+
+    coastsum = (xi_coast+eta_coast).astype(bool)
+    coast,b = xr.align(coastsum, croco_ds.mask_rho,
+                       join='outer',fill_value=0)
+    
+    return coast
+    
+    
+def distance2coast(croco_ds, **kwargs):
+    
+    '''
+    Calculate the distance to coast from a coastline
+    
+    Parameters
+    ----------
+    croco_ds: xr.Dataset
+              Provides the variables coastline_rho, lon_rho, lat_rho
+    condition: boolean array the same shape as mask_rho to mask the coastline 
+               and i.e. remove islands
+    '''
+    
+    # apply masking condition (i.e. remove islands)
+    cline = croco_ds.coastline_rho
+    clon = croco_ds.lon_rho
+    clat = croco_ds.lat_rho
+    if kwargs and 'condition' in kwargs:
+        cline = cline.where(kwargs['condition'],drop=True)
+        clon = clon.where(kwargs['condition'],drop=True)
+        clat= clat.where(kwargs['condition'],drop=True)
+
+    # flatten coast to one dimension
+    coast1D = cline.stack(points=(cline.dims))
+    lon1D = clon.stack(points=(cline.dims)).where(coast1D,drop=True)
+    lat1D = clat.lat_rho.stack(points=(cline.dims)).where(coast1D,drop=True)
+    #lonlim = (lon1D > -84)
+    #lon1D = lon1D.where(lonlim,drop=True)
+    #lat1D = lat1D.where(lonlim,drop=True)
+    coastline_from_mask = np.stack([lon1D.values,lat1D.values]).T
+    print('Calculating distances to {} coastal points...'.format(coastline_from_mask.shape[0]))
+    croco_coords = [np.array([lo,la]) for lo,la in zip(croco_ds.lon_rho.stack(n=(croco_ds.mask_rho.dims)).values,
+                                                       croco_ds.lat_rho.stack(n=(croco_ds.mask_rho.dims)).values)]
+    
+    geo = cgeo.Geodesic()
+    dist_list = []
+    update_progress(0)
+    for ind,cro in enumerate(croco_coords):
+        dists = geo.inverse(cro,coastline_from_mask).base[:,0]/1000
+        dist_list.append(np.min(dists))
+        if ind % 100 == 0:
+            update_progress(ind/len(croco_coords))
+    distarray = np.array(dist_list)
+    update_progress(1)
+
+    dist2coast = xr.zeros_like(croco_ds.mask_rho).stack(n=croco_ds.mask_rho.dims)
+    dist2coast.values = distarray.T
+    dist2coast = dist2coast.unstack('n')
+    
+    return dist2coast
 
 
 def get_vertical_dimension(var):
