@@ -150,6 +150,9 @@ def get_coastline_from_mask(croco_ds):
     ----------
     croco_ds: xr.Dataset
               Provides the variables mask_rho, lon_rho, lat_rho
+              
+    TODO:
+    Add this function to initialization of dataset and save as "coastline_rho" variable
     '''
 
     maskdims = croco_ds.mask_rho.dims
@@ -177,7 +180,7 @@ def get_coastline_from_mask(croco_ds):
     return coast
     
     
-def distance2coast(croco_ds, **kwargs):
+def distance2coast(croco_ds, coast='coastline_rho', **kwargs):
     
     '''
     Calculate the distance to coast from a coastline
@@ -191,7 +194,7 @@ def distance2coast(croco_ds, **kwargs):
     '''
     
     # apply masking condition (i.e. remove islands)
-    cline = croco_ds.coastline_rho
+    cline = croco_ds[coast]
     clon = croco_ds.lon_rho
     clat = croco_ds.lat_rho
     if kwargs and 'condition' in kwargs:
@@ -202,7 +205,7 @@ def distance2coast(croco_ds, **kwargs):
     # flatten coast to one dimension
     coast1D = cline.stack(points=(cline.dims))
     lon1D = clon.stack(points=(cline.dims)).where(coast1D,drop=True)
-    lat1D = clat.lat_rho.stack(points=(cline.dims)).where(coast1D,drop=True)
+    lat1D = clat.stack(points=(cline.dims)).where(coast1D,drop=True)
     #lonlim = (lon1D > -84)
     #lon1D = lon1D.where(lonlim,drop=True)
     #lat1D = lat1D.where(lonlim,drop=True)
@@ -406,7 +409,7 @@ def var2rho(croco_ds, var):
         var_rho = grid.interp(var,'X', boundary='extend')
     elif 'eta_v' in var.dims:
         var_rho = grid.interp(var,'Y', boundary='extend')
-        add_coords(var_rho, latlon_rho)
+        add_coords(croco_ds, var_rho, latlon_rho)
         var_rho.attrs = var.attrs
         var_rho.name = var.name
     elif 's_w' in var.dims:
@@ -423,7 +426,7 @@ def var2rho(croco_ds, var):
                                                           var_rho.attrs['standard_name'][-9:])
     # new lat/lon coordinates are not added by xgcm need to be
     # added by hand from the Dataset to the DataArray
-    add_coords(var_rho, latlon_rho)
+    add_coords(croco_ds, var_rho, latlon_rho)
 
     return var_rho
 
