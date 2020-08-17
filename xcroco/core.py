@@ -85,7 +85,8 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
         # 'AGRIF version'
         hmin = np.nanmin(da2.h)
         try:
-            da2.hc.data = np.min([hmin, da2.Tcline])
+            #da2.hc.data = np.min([hmin, da2.Tcline])
+            da2.hc.values = (dd.hc.values*0+1)*np.min([hmin, dd.Tcline])
         except AttributeError:
             da2['hc'] = np.min([hmin, da2.Tcline])
 
