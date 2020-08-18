@@ -12,7 +12,7 @@ import glob
 import time, sys
 
     
-def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
+def croco_dataset(model_output, time_dim='time', grid=None, xgcm_grid=None, *args, **kwargs):
 
     if isinstance(model_output, xr.Dataset):
         da = model_output
@@ -74,7 +74,10 @@ def croco_dataset(model_output, time_dim='time', grid=None, *args, **kwargs):
     
     # Copy attrs and create XGCM-grid object
     da2.attrs = da.attrs
-    da2.attrs['xgcm-Grid'] = Grid(da2, periodic=False)
+    if xgcm_grid:
+        da2.attrs['xgcm-Grid'] = xgcm_grid
+    else:
+        da2.attrs['xgcm-Grid'] = Grid(da2, periodic=False)
 
     # Read grid parameters depending on version
     # TODO: See how this version checking (taken from ROMSTOOLS) is done in the new official CROCOTOOLS 
