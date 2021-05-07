@@ -72,12 +72,12 @@ def croco_dataset(model_output, time_dim='time', grid=None, xgcm_grid=None, *arg
             v_da = v_da.isel(**{time_dim:0})
             da2.coords[v] = v_da.drop('time')
     
-    # Copy attrs and create XGCM-grid object
+    # Copy attrs and create XGCM grid object
     da2.attrs = da.attrs
     if xgcm_grid:
-        da2.attrs['xgcm-Grid'] = xgcm_grid
+        da2.attrs['xgrid'] = xgcm_grid
     else:
-        da2.attrs['xgcm-Grid'] = Grid(da2, periodic=False)
+        da2.attrs['xgrid'] = Grid(da2, periodic=False)
 
     # Read grid parameters depending on version
     # TODO: See how this version checking (taken from ROMSTOOLS) is done in the new official CROCOTOOLS 
@@ -408,7 +408,7 @@ def var2rho(croco_ds, var):
     position on grid is checked automatically
     '''
     latlon_rho = ['lon_rho','lat_rho']
-    grid = croco_ds.attrs['xgcm-Grid']
+    grid = croco_ds.attrs['xgrid']
     if 'xi_u' in var.dims:
         var_rho = grid.interp(var,'X', boundary='extend')
     elif 'eta_v' in var.dims:
@@ -438,8 +438,13 @@ def rho2var(croco_ds, var_rho, var_target):
 
     if any(dimension in var_rho.dims for dimension in ['eta_v','xi_u','s_w']):
         raise ValueError('Input array is not on RHO-grid')
-    grid = croco_ds.attrs['xgcm-Grid']
-
+    grid = croco_ds.attrs['xgrid']
+    
+    try:
+        del var_rho.coords['z_rho']
+    except KeyError:
+        pass
+    
     if 'xi_u' in var_target.dims:
         var = grid.interp(var_rho,'X', boundary='extend')
         add_coords(croco_ds, var, ['lat_u','lon_u'])
@@ -485,9 +490,14 @@ def get_depths(croco_ds, var):
         depths = zlevs(croco_ds, 'w')
     else:
         depths = zlevs(croco_ds, 'r')
-    if any(dimension in var.dims for dimension in ['eta_v','xi_u']):
-        depths = rho2var(croco_ds, depths, var)
-
+        if 'xi_u' in var.dims:
+            depths = rho2var(croco_ds, depths, var)
+            depths.attrs['long_name'] = 'depth at U-points'
+            depths.name = 'z_u'
+        if 'eta_v' in var.dims:
+            depths = rho2var(croco_ds, depths, var)
+            depths.attrs['long_name'] = 'depth at V-points'
+            depths.name = 'z_v'
     if 'time' in depths.dims:
         depths = depths.sel(time=var.time)
     
@@ -538,7 +548,7 @@ def valid_levels(levels):
     return levels
     
     
-def vinterp(var, z, depth):
+def vinterp_old(var, z, depth):
 
     '''
     function  vnew = vinterp(var,z,depth)
@@ -625,6 +635,13 @@ def vinterp(var, z, depth):
     return vnew
 
 
+def vinterp():
+    
+    return None
+
+    
+
+
 def vinterp_anyvar(var, g, g_slice):
 
     '''
@@ -698,13 +715,6 @@ def vinterp_anyvar(var, g, g_slice):
         vnew = vnew.where(levs>0)
         #vnew = mask(vnew)
         vnew.coords[g.name] = g_slice
-    
- #   vnew.coords['z'].attrs['long_name'] = 'g_slice of Z-levels'
- #   vnew.coords['z'].name = 'z'
- #   vnew.coords['z'].attrs['units'] = 'meter'
- #   vnew.coords['z'].attrs['field'] = 'g_slice, scalar, series'
- #   vnew.coords['z'].attrs['standard_name'] = 'g_slice'
- #   vnew.attrs = var.attrs
 
     return vnew
 
@@ -731,8 +741,8 @@ def mask(croco_ds, var):
         return var.where(croco_ds.mask_rho)
 
     
-def hslice(croco_ds, var, level):
-
+def hslice(croco_ds, var, zlevs, masked=False):
+    
     '''
     get a horizontal slice of a CROCO variable
 
@@ -741,48 +751,37 @@ def hslice(croco_ds, var, level):
     var     xarray.DataArray
             3D or 4D variable array
             
-    level   real < 0 or real > 0 
-            vertical level of the slice (scalar), interpolate a horizontal slice at z=level
+    level   real < 0
+            interpolate a horizontal slice at z=level
+            
+    masked  True or False
+            uses variable 'salt' to compute and mask the bottom
 
     Returns
     -------
     var     xarray.DataArray
             2D or 3D array
     '''
-
-    vertical_dim = get_vertical_dimension(var)
-
-    #
-    # Get a horizontal level of a 3D variable
-    #
-
-    # Get the depths of the sigma levels
-    z = get_depths(croco_ds, var)
-
-    # Do the interpolation
-    if 'time' in var.dims and var.time.shape[0] > 1:
-        timesteps = var.time.shape[0]
-        print("Looping over time dimension...")
-        slicelist = []
-        update_progress(0)
-        for tt in range(timesteps):
-            timesl = vinterp(var.isel(time=tt), z.isel(time=tt), level)
-            try:
-                timesl.compute()
-            except AttributeError:
-                pass
-            slicelist.append(timesl)
-            update_progress((tt+1)/timesteps)
-        vnew = xr.concat(slicelist, dim='time')
-    else:
-        vnew = vinterp(var, z, level)
-    vnew.coords['depth'] = np.array(level).astype('float32')
-        
-    vnew = mask(croco_ds, vnew)
-    vnew.attrs = var.attrs
-    vnew.name = var.name
     
-    return vnew
+    try:
+        iter(zlevs)
+    except TypeError:
+        zlevs = [zlevs]  
+        
+    zdata = get_depths(croco_ds, var)   
+    var_zgrid = croco_ds.attrs['xgrid'].transform(var,'Z',zlevs,target_data=zdata)
+    
+    if masked:
+        mask = croco_ds.attrs['xgrid'].transform(croco_ds.salt,'Z',zlevs,target_data=croco_ds.z_rho)>0
+        if any(dimension in var.dims for dimension in ['eta_v','xi_u','s_w']):
+            mask = rho2var(croco_ds, mask, var)
+            mask = mask.rename({'z_rho':'z_u'})
+            zcoord = [c for c in var_zgrid.coords if 'z_' in c][0]
+            mask.coords[zcoord] = var_zgrid[zcoord]
+        var_zgrid = var_zgrid.where(mask)
+    
+    return var_zgrid
+
 
 
 def vslice(croco_ds, var, **kwargs):

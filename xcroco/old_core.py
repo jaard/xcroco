@@ -704,6 +704,60 @@ class Xcroco:
 
         return vnew
     
+    
+    def hslice(croco_ds, var, level):
+
+        '''
+        get a horizontal slice of a CROCO variable
+
+        Parameters
+        ----------
+        var     xarray.DataArray
+                3D or 4D variable array
+
+        level   real < 0 or real > 0 
+                vertical level of the slice (scalar), interpolate a horizontal slice at z=level
+
+        Returns
+        -------
+        var     xarray.DataArray
+                2D or 3D array
+        '''
+
+        vertical_dim = get_vertical_dimension(var)
+
+        #
+        # Get a horizontal level of a 3D variable
+        #
+
+        # Get the depths of the sigma levels
+        z = get_depths(croco_ds, var)
+
+        # Do the interpolation
+        if 'time' in var.dims and var.time.shape[0] > 1:
+            timesteps = var.time.shape[0]
+            print("Looping over time dimension...")
+            slicelist = []
+            update_progress(0)
+            for tt in range(timesteps):
+                timesl = vinterp(var.isel(time=tt), z.isel(time=tt), level)
+                try:
+                    timesl.compute()
+                except AttributeError:
+                    pass
+                slicelist.append(timesl)
+                update_progress((tt+1)/timesteps)
+            vnew = xr.concat(slicelist, dim='time')
+        else:
+            vnew = vinterp(var, z, level)
+        vnew.coords['depth'] = np.array(level).astype('float32')
+
+        vnew = mask(croco_ds, vnew)
+        vnew.attrs = var.attrs
+        vnew.name = var.name
+
+        return vnew
+    
     def get_isosurface(self, var, value):
 
         '''
