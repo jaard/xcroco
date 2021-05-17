@@ -548,7 +548,7 @@ def valid_levels(levels):
     return levels
     
     
-def vinterp_old(var, z, depth):
+def vinterp(var, z, depth):
 
     '''
     function  vnew = vinterp(var,z,depth)
@@ -635,12 +635,6 @@ def vinterp_old(var, z, depth):
     return vnew
 
 
-def vinterp():
-    
-    return None
-
-    
-
 
 def vinterp_anyvar(var, g, g_slice):
 
@@ -719,6 +713,7 @@ def vinterp_anyvar(var, g, g_slice):
     return vnew
 
 
+
 def mask(croco_ds, var):
 
     '''
@@ -768,23 +763,27 @@ def hslice(croco_ds, var, zlevs, masked=False):
     except TypeError:
         zlevs = [zlevs]  
         
-    zdata = get_depths(croco_ds, var)   
+    #zdata = get_depths(croco_ds, var)
+    zkey = [z for z in list(var.coords) if 'z_' in z][0]
+    zdata = var[zkey]
     var_zgrid = croco_ds.attrs['xgrid'].transform(var,'Z',zlevs,target_data=zdata)
+    var_zgrid = var_zgrid.rename({zkey:'z'})
     
     if masked:
         mask = croco_ds.attrs['xgrid'].transform(croco_ds.salt,'Z',zlevs,target_data=croco_ds.z_rho)>0
         if any(dimension in var.dims for dimension in ['eta_v','xi_u','s_w']):
             mask = rho2var(croco_ds, mask, var)
-            mask = mask.rename({'z_rho':'z_u'})
-            zcoord = [c for c in var_zgrid.coords if 'z_' in c][0]
-            mask.coords[zcoord] = var_zgrid[zcoord]
+        mask = mask.rename({'z_rho':'z'})
+        mask.coords['z'] = var_zgrid['z']
+            #zcoord = [c for c in var_zgrid.coords if 'z_' in c][0]
+            #mask.coords[zcoord] = var_zgrid[zcoord]
         var_zgrid = var_zgrid.where(mask)
     
     return var_zgrid
 
 
 
-def vslice(croco_ds, var, **kwargs):
+def vslice(croco_ds, var, zlevels=None, **kwargs):
     
     '''
     get a vertical slice of a CROCO variable
@@ -874,9 +873,6 @@ def vslice(croco_ds, var, **kwargs):
     else:
         raise AttributeError('Please specify a series of points in 2 dimensions')
 
-    if "s_rho" not in var.coords:
-        raise ValueError("Section requires vertical dimension s_rho")
-
     # Distance between section points
     pm = pm.interp(**rho_interpdict).values
     pn = pn.interp(**rho_interpdict).values
@@ -902,12 +898,24 @@ def vslice(croco_ds, var, **kwargs):
         B0 = B0.isel(**{'distance':0})
         del B0['distance']
     
-    # Transpose dimensions for z_rho
-    dimlist = list(B0.dims); dimlist.remove('s_rho')
-    dimlist = ['s_rho'] + dimlist
-    B0['z_rho'] = B0['z_rho'].transpose(*dimlist)
+    if "s_rho" in var.coords:
+        # Transpose dimensions for z_rho
+        dimlist = list(B0.dims); dimlist.remove('s_rho'); dimlist = ['s_rho'] + dimlist
+        B0['z_rho'] = B0['z_rho'].transpose(*dimlist)
     
-    return B0
+    # Transform the vertical coordinate if Z-levels are specified
+    try:
+        zswitch = any(zlevels)
+    except TypeError:
+        zswitch = bool(zlevels)
+
+    if zswitch:
+        D0 = xr.Dataset()
+        D0.attrs['xgrid'] = Grid(B0, periodic=False)
+        B0z = hslice(D0, B0, zlevels, masked=False)
+        return B0z
+    else:
+        return B0
 
 
 def update_progress(progress):
