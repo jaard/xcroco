@@ -1,6 +1,7 @@
 .DS_Store
 xcroco.egg-info/*
 xcroco.egg-info
+.ipynb_checkpoints/*
 xcroco/.ipynb_checkpoints/*
 xcroco/__pycache__/*
 .eggs/*
