@@ -77,7 +77,15 @@ def croco_dataset(model_output, time_dim='time', grid=None, xgcm_grid=None, *arg
     if xgcm_grid:
         da2.attrs['xgrid'] = xgcm_grid
     else:
-        da2.attrs['xgrid'] = Grid(da2, periodic=False)
+        #da2.attrs['xgrid'] = Grid(da2, periodic=False)
+        da2.attrs['xgrid'] = Grid(da2,
+                                  coords = {'X': {'center': 'xi_rho', 'inner': 'xi_u'},
+                                            'Y': {'center': 'eta_rho', 'inner': 'eta_v'},
+                                            'Z': {'center': 's_rho', 'outer': 's_w'}},
+                                  boundary={'X':'extend','Y':'extend','Z':'extend'},
+                                  periodic=False)
+        
+    #return da2 # DEBUG
 
     # Read grid parameters depending on version
     # TODO: See how this version checking (taken from ROMSTOOLS) is done in the new official CROCOTOOLS 
@@ -767,7 +775,7 @@ def hslice(croco_ds, var, zlevs, masked=False):
     zkey = [z for z in list(var.coords) if 'z_' in z][0]
     zdata = var[zkey]
     var_zgrid = croco_ds.attrs['xgrid'].transform(var,'Z',zlevs,target_data=zdata)
-    var_zgrid = var_zgrid.rename({zkey:'z'})
+    var_zgrid = var_zgrid.rename({zkey:'rz'})
     
     if masked:
         mask = croco_ds.attrs['xgrid'].transform(croco_ds.salt,'Z',zlevs,target_data=croco_ds.z_rho)>0
@@ -934,3 +942,77 @@ def update_progress(progress):
     sys.stdout.flush()
     if progress == 1:
         print('\n')
+        
+        
+def w2omega(croco_ds, xgrid=None):
+    
+    if not xgrid:
+        xgrid = croco_ds.attrs['xgrid']
+    
+    Wet = croco_ds.v * xgrid.diff(croco_ds.z_rho, 'Y') * xgrid.interp(croco_ds.pn, 'Y')
+    Wxi = croco_ds.u * xgrid.diff(croco_ds.z_rho, 'X') * xgrid.interp(croco_ds.pm, 'X')
+    
+    w = croco_ds.w - xgrid.interp(Wxi, 'X') - xgrid.interp(Wet, 'Y')
+    bound = (croco_ds.w.eta_rho == 0) + (croco_ds.w.eta_rho == croco_ds.w.eta_rho[-1]) + (croco_ds.w.xi_rho == 0) + (croco_ds.w.xi_rho == croco_ds.w.xi_rho[-1])
+    w = w.where(np.invert(bound),other=croco_ds.w.where(bound))
+    z_r = croco_ds.z_rho
+    z_w = croco_ds.z_w
+    
+    zw_center = z_w #.sel(**{'s_w':croco_ds.s_w[1:-1]});
+    zr_left = z_r.sel(**{'s_rho':croco_ds.s_rho[:-1]}); del zr_left.coords['s_rho']; zr_left = zr_left.rename({'s_rho':'s_w'}); zr_left.coords['s_w'] = croco_ds['s_w'].sel(**{'s_w':croco_ds.s_w[1:-1]});
+    zr_right = z_r.sel(**{'s_rho':croco_ds.s_rho[1:]}); del zr_right.coords['s_rho']; zr_right = zr_right.rename({'s_rho':'s_w'}); zr_right.coords['s_w'] = croco_ds['s_w'].sel(**{'s_w':croco_ds.s_w[1:-1]});
+    w_left = w.sel(**{'s_rho':croco_ds.s_rho[:-1]}); del w_left.coords['s_rho']; w_left = w_left.rename({'s_rho':'s_w'}); w_left.coords['s_w'] = croco_ds['s_w'].sel(**{'s_w':croco_ds.s_w[1:-1]});
+    w_right = w.sel(**{'s_rho':croco_ds.s_rho[1:]}); del w_right.coords['s_rho']; w_right = w_right.rename({'s_rho':'s_w'}); w_right.coords['s_w'] = croco_ds['s_w'].sel(**{'s_w':croco_ds.s_w[1:-1]});
+
+    # interpolation on w grid conserving volume flux
+    omega = ( (zr_right-zw_center) * w_right + (zw_center-zr_left) * w_left ) / (zr_right-zr_left)
+    # set top and bottom layers to zero
+    omega = xr.concat((xr.zeros_like(croco_ds.z_w.isel(s_w=0)), omega, xr.zeros_like(croco_ds.z_w.isel(s_w=-1))),'s_w')
+    
+    return omega
+
+
+def croco_horiz_trcflux(croco_ds, var, dim, Flx, xgrid=None):
+    
+    if not xgrid:
+        xgrid = croco_ds.attrs['xgrid']
+    
+    coor = xgrid.axes[dim].coords['center']
+    coor_new = xgrid.axes[dim].coords['inner']
+    
+    mask = xgrid.interp(croco_ds.mask_rho,dim,boundary='extend')
+    curv = xgrid.diff((xgrid.diff(var,dim)*mask),dim)
+    curv_left = curv.sel(**{coor:croco_ds[coor][:-1]}); del curv_left.coords[coor]; curv_left = curv_left.rename({coor:coor_new});
+    curv_right = curv.sel(**{coor:croco_ds[coor][1:]}); del curv_right.coords[coor]; curv_right = curv_right.rename({coor:coor_new});
+    TXadv = -xgrid.diff(xgrid.interp(var,dim) * Flx - 0.166666666666 * (curv_left * Flx.where(Flx>0,other=0) + curv_right * Flx.where(Flx<0,other=0)), dim) * croco_ds.mask_rho
+    Ttrun = -xgrid.diff((0.041666667 * xgrid.diff(curv,dim) * np.abs(Flx)),dim) * croco_ds.mask_rho
+    
+    return TXadv, Ttrun
+
+
+def croco_vert_trcflux(croco_ds, var, W, xgrid=None):
+    
+    if not xgrid:
+        xgrid = croco_ds.attrs['xgrid']
+    
+    epsil = 1e-16
+
+    FC = xgrid.diff(var,'Z'); bot = FC.isel(s_w=1); del bot.coords['s_w']; bot.coords['s_w'] = FC.coords['s_w'].isel(s_w=0); top = FC.isel(s_w=-2); del top.coords['s_w']
+    bot_out = FC.isel(s_w=0); top_out = FC.isel(s_w=-1)
+    FC = FC.sel(**{'s_w':croco_ds.s_w[1:-1]}); output_dims = FC.dims
+    FC = xr.concat([bot.expand_dims('s_w'),FC,top.expand_dims('s_w')],dim='s_w').transpose(*output_dims)
+
+    FC_left = FC.sel(**{'s_w':croco_ds.s_w[:-1]}); del FC_left.coords['s_w']; FC_left.coords['s_w'] = croco_ds['s_w'].sel(**{'s_w':croco_ds.s_w[1:]});
+    FC_right = FC.sel(**{'s_w':croco_ds.s_w[1:]}); del FC_right.coords['s_w']; FC_right.coords['s_w'] = croco_ds['s_w'].sel(**{'s_w':croco_ds.s_w[1:]});
+    cff = 2 * (FC_right*FC_left)
+    CF = cff / (FC_right+FC_left)
+    CF = CF.where(cff >= epsil, other=0)
+
+    CF_left = CF.sel(**{'s_w':croco_ds.s_w[1:-1]});
+    CF_right = CF.sel(**{'s_w':croco_ds.s_w[2:]}); del CF_right.coords['s_w']; CF_right.coords['s_w'] = croco_ds['s_w'].sel(**{'s_w':croco_ds.s_w[1:-1]});
+    FC = 0.5 * (2 * xgrid.interp(var,'Z') - 0.333333 * (CF_right-CF_left)) * W; del FC.coords['z_w']
+    FC = xr.concat([bot_out.expand_dims('s_w'),FC,top_out.expand_dims('s_w')],dim='s_w').transpose(*output_dims)
+
+    Tvadv = -xgrid.diff(FC,'Z')
+
+    return Tvadv
