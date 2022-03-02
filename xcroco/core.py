@@ -1010,9 +1010,136 @@ def croco_vert_trcflux(croco_ds, var, W, xgrid=None):
 
     CF_left = CF.sel(**{'s_w':croco_ds.s_w[1:-1]});
     CF_right = CF.sel(**{'s_w':croco_ds.s_w[2:]}); del CF_right.coords['s_w']; CF_right.coords['s_w'] = croco_ds['s_w'].sel(**{'s_w':croco_ds.s_w[1:-1]});
-    FC = 0.5 * (2 * xgrid.interp(var,'Z') - 0.333333 * (CF_right-CF_left)) * W; del FC.coords['z_w']
+    FC = 0.5 * (2 * xgrid.interp(var,'Z') - 0.333333 * (CF_right-CF_left)) * W; 
+    try:
+        del FC.coords['z_w']
+    except KeyError:
+        pass
     FC = xr.concat([bot_out.expand_dims('s_w'),FC,top_out.expand_dims('s_w')],dim='s_w').transpose(*output_dims)
 
     Tvadv = -xgrid.diff(FC,'Z')
 
     return Tvadv
+
+
+def recompute_trcflux(mfile, diafile, mdiafile, trc, time_dim):
+    
+    ncd = xr.open_dataset(diafile)
+    vlist = [a for a in list(ncd.data_vars) if 'temp' not in a and 'salt' not in a and 'adv' in a]
+
+    ncm = xco.croco_dataset(mfile, time_dim=time_dim)
+    
+    theta_s = ncm.theta_s
+    theta_b = ncm.theta_b
+    N = ncm.s_rho.shape[0]
+    hc = ncm.hc.values
+    h = ncm.h.T
+    pm = ncm.pm.T
+    pn = ncm.pn.T
+    Mp,Lp = ncm.h.shape
+
+    dn_u = 2/(pn[0:Lp-1,:].values+pn[1:Lp,:].values)
+    dm_v = 2/(pm[:,0:Mp-1].values+pm[:,1:Mp].values)
+    cff1 = pm*pn
+    ncm.coords['dn_u'] = (('xi_u','eta_rho'),dn_u)
+    ncm.coords['dm_v'] = (('xi_rho','eta_v'),dm_v)
+    
+    # new advflux dataset created here
+    ncmts = xr.Dataset()
+    ncmts.attrs = ncd.attrs
+    for co in list(ncd.coords):
+        ncmts.coords[co] = ncd.coords[co]
+    varlist = list(ncd.data_vars)
+    for vv in varlist[:max([n for n,v in enumerate(varlist) if 'time' in v])+1]:
+        ncmts[vv] = ncd[vv]
+        
+    xgrid=ncm.attrs['xgrid']
+
+    #Hz = zw.sel(s_w=ncm.s_w[1:N+1]).values-zw.sel(s_w=ncm.s_w[0:N]).values
+    Hz = xgrid.diff(ncm.z_w.astype('double'),'Z')
+
+    u = ncm.u.transpose(*sdimlast(ncm.u)).values
+
+    # compute Hflx through cell
+    FlxU = xgrid.interp(Hz,'X')*ncm.dn_u*ncm.u
+    FlxV = xgrid.interp(Hz,'Y')*ncm.dm_v*ncm.v
+
+    # compute Flux term and "diffusion" in xsi direction
+    cff = cff1/Hz
+    TXadv, Ttrun = xco.croco_horiz_trcflux(ncm, ncm[trc], 'X', FlxU)
+    ncmts[trc+'_xadv'] = TXadv * cff
+    ncmts[trc+'_trun'] = Ttrun * cff
+    aa = TXadv * cff
+    TYadv, Ttrun = xco.croco_horiz_trcflux(ncm, ncm[trc], 'Y', FlxV)
+    ncmts[trc+'_yadv'] = TYadv * cff
+    ncmts[trc+'_trun'] = ncmts[trc+'_trun'] + (Ttrun * cff)
+
+    # compute Wflux through cell
+    ipmn = 1 / (ncm.pm*ncm.pn)
+    W = xco.w2omega(ncm) * ipmn
+
+    # compute Flux term in z direction
+    cff = cff1/Hz
+    TVadv = xco.croco_vert_trcflux(ncm, ncm[trc], W)
+    ncmts[trc+'_vadv'] = TVadv * cff
+    
+    return ncmts
+
+
+def rho_eos_potential(temp,salt):
+    '''
+    =======================================================================
+      Copyright (c) 1996 Rutgers University                             ===
+    =======================================================================
+                                                                        ===
+      This routine computes density anomaly via equation of state for   ===
+      seawater.                                                         ===
+                                                                        ===
+      On Input:                                                         ===
+                                                                        ===
+         itracer   Switch indicating which potential temperature and    ===
+                   salinity to use (integer):                           ===
+                     itracer=0 => Use prognostic variables.             ===
+                     itracer=1 => Use climatology variables.            ===
+                                                                        ===
+      On Output:                                                        ===
+                                                                        ===
+         dena      Potential Density anomaly (kg/m^3).                  ===
+                                                                        ===
+      Reference:                                                        ===
+                                                                        ===
+     << This equation of state formulation has been derived by Jackett  ===
+        and McDougall (1992), unpublished manuscript, CSIRO, Australia. ===
+        It computes in-situ density anomaly as a function of potential  ===
+        temperature (Celsius) relative to the surface, salinity (PSU),  ===
+        and depth (meters).  It assumes  no  pressure  variation along  ===
+        geopotential  surfaces,  that  is,  depth  and  pressure  are   ===
+        interchangeable. >>                                             ===
+                                              John Wilkin, 29 July 92   ===
+                                                                        ===
+    =======================================================================
+    '''
+    
+    Q0=+999.842594 ; Q1=+6.793952e-2; Q3=-9.095290e-3
+    Q4=+1.001685e-4; Q5=-1.120083e-6; Q6=+6.536332e-9
+    U0=+0.824493   ; U1=-4.08990e-3 ; U2=+7.64380e-5 
+    U3=-8.24670e-7 ; U4=+5.38750e-9 ; V0=-5.72466e-3 
+    V1=+1.02270e-4 ; V2=-1.65460e-6 ; W0=+4.8314e-4
+
+    #-----------------------------------------------------------------------
+    #  Non-linear equation of state, Jackett and McDougall (1992).
+    #  MODIFIED XAVIER TO REMOVE THE IN SITU CORRECTION - POTENTIAL 
+    #  DENSITY IS COMPUTED HERE
+    #-----------------------------------------------------------------------
+    #
+    #  Compute secant bulk modulus and store into a utility work array.
+    #  The units are as follows:
+    #
+    #  Compute potential density anomaly (kg/m^3).
+    #
+    dena=(Q0+temp*(Q1+temp*(Q3+temp*(Q4+temp*(Q5+temp*Q6))))+
+            salt*(U0+temp*(U1+temp*(U2+temp*(U3+temp*U4))))+
+            salt**(3/2)*(V0+temp*(V1+temp*V2))+W0*salt*salt-1000)
+    dena = dena.where(dena>0, other=np.nan)
+        
+    return dena
