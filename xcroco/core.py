@@ -321,6 +321,8 @@ def zlevs(croco_ds, typ, **kwargs):
             Cs_w[0] = -1.0
             Cs_w[N] = 0
             sc_w[1:N] = (np.arange(1, N) - N) / N
+            croco_ds['sc_w'] = ('s_w', sc_w)
+            sc_w = croco_ds['sc_w']
             Cs_w = csf(croco_ds, sc_w)
             N += 1
         else:
