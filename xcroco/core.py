@@ -106,7 +106,7 @@ def croco_dataset(model_output, time_dim='time', grid=None, xgcm_grid=None, *arg
     try:
         VertCoordType = da2.VertCoordType
         if VertCoordType == 'NEW':
-            da2.attrs.s_coord = 2
+            da2.attrs['s_coord'] = 2
     except AttributeError:
         try:
             vtrans = da2.Vtransform
