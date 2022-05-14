@@ -23,8 +23,11 @@ def croco_dataset(model_output, time_dim='time', grid=None, xgcm_grid=None, *arg
     # Check if a separate grid file was supplied,
     # if this is the case load & merge with output file
     if grid:
-        grid_path = grid
-        gr = xr.open_dataset(grid_path)
+        if isinstance(grid, xr.Dataset):
+            gr = grid
+        else:
+            grid_path = grid
+            gr = xr.open_dataset(grid_path)
         # If the grid files has the redundant dimensions eta_u/xi_v then rename them
         try:
             gr = gr.rename({'eta_u':'eta_rho', 'xi_v':'xi_rho'})
