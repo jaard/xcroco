@@ -125,7 +125,8 @@ def croco_dataset(model_output, time_dim='time', grid=None, xgcm_grid=None, *arg
     
     # Define Z coordinates
     da2.coords['z_rho'] = zlevs(da2, 'r')
-    da2.coords['z_w'] = zlevs(da2, 'w')
+    if 's_w' in da2.dims:
+        da2.coords['z_w'] = zlevs(da2, 'w')
     if 'xi_u' in da2.dims:
         da2.coords['z_u'] = rho2var(da2, da2.z_rho, da2.u)
         da2['z_u'].attrs['long_name'] = 'depth at U-points'
