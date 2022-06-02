@@ -28,7 +28,7 @@ pip install -e xcroco
 
 ## Notebook with usage examples
 
-To see some examples of some basic analysis of  CROCO output using xcroco, please see the files [xcroco_examples.ipynb](https://raw.githubusercontent.com/jaard/xcroco/master/xcroco_example.ipynb) and [xcroco_examples.html](https://raw.githubusercontent.com/jaard/xcroco/master/xcroco_example.html) which have identical content.
+To see some examples of some basic analysis of  CROCO output using xcroco, please see the files [xcroco_examples.ipynb](https://raw.githubusercontent.com/jaard/xcroco/master/xcroco_example.ipynb) and [xcroco_examples.html](https://htmlpreview.github.io/?https://raw.githubusercontent.com/jaard/xcroco/master/xcroco_example.html) which have identical content.
 The .ipynb version can be edited and run using Jupyter Lab, while you can view the .html version with any browser. The github website cannot show large HTML files directly, so please download and view it locally. 
 
 
